@@ -34,6 +34,7 @@ public class ReflectionRepository
         = new();
 
     private CustomMetadataProvider? _customMetadataProvider;
+    private IEntityFrameworkMetadataProvider _entityFrameworkMetadata;
 
     /// <summary>
     /// Provider for extracting custom attribute metadata from symbols,
@@ -111,8 +112,15 @@ public class ReflectionRepository
         DbContexts.Select(t => t.ClassViewModel)
         .Union(ClientClasses).Union(Services);
 
+    internal IEntityFrameworkMetadataProvider EntityFrameworkMetadata
+    {
+        get => _entityFrameworkMetadata;
+        set => _entityFrameworkMetadata = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
     public ReflectionRepository()
     {
+        _entityFrameworkMetadata = new RuntimeEntityFrameworkMetadataProvider(this);
     }
 
     private HashSet<string>? _rootTypeWhitelist = null;
@@ -123,6 +131,8 @@ public class ReflectionRepository
         {
             _rootTypeWhitelist = null;
         }
+
+        EntityFrameworkMetadata.Clear();
     }
 
     internal void DiscoverCoalescedTypes(IEnumerable<TypeViewModel> rootTypes)
@@ -204,6 +214,7 @@ public class ReflectionRepository
         _clientTypes = null;
         _clientMethods = null;
         _customMetadataProvider = null;
+        _entityFrameworkMetadata.Clear();
 
         if (type.IsA<DbContext>())
         {
