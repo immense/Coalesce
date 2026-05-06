@@ -320,11 +320,35 @@ public class ReflectionRepository
     /// </summary>
     private void ConditionallyAddAndDiscoverTypesOn(ValueViewModel typeUsage)
     {
-        var type = typeUsage.PureType;
+        ConditionallyAddAndDiscoverType(typeUsage.PureType, typeUsage);
+        if (typeUsage.Type.IsDictionary)
+        {
+            foreach (var dictionaryArg in typeUsage.Type.GenericArgumentsFor(typeof(IDictionary<,>)) ?? [])
+            {
+                ConditionallyAddAndDiscoverType(dictionaryArg);
+            }
+        }
+    }
+
+    private void ConditionallyAddAndDiscoverType(TypeViewModel type, ValueViewModel? usage = null)
+    {
+        if (type.IsDictionary)
+        {
+            foreach (var dictionaryArg in type.GenericArgumentsFor(typeof(IDictionary<,>)) ?? [])
+            {
+                ConditionallyAddAndDiscoverType(dictionaryArg);
+            }
+            return;
+        }
+
+        type = type.PureType;
         var classViewModel = type.ClassViewModel;
         if (classViewModel != null)
         {
-            classViewModel.Usages.Add(typeUsage);
+            if (usage is not null)
+            {
+                classViewModel.Usages.Add(usage);
+            }
 
             // Don't dig in if:
             //  - This is a known entity type (its not external)

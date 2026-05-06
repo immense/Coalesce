@@ -4,6 +4,7 @@ using IntelliTect.Coalesce.TypeDefinition;
 using IntelliTect.Coalesce.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace IntelliTect.Coalesce.CodeGeneration.Api.Generators;
@@ -36,6 +37,7 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             "IntelliTect.Coalesce.Mapping",
             "IntelliTect.Coalesce.Models",
             "System",
+            "System.Collections.Immutable",
             "System.Linq",
             "System.Collections.Generic",
             "System.Security.Claims",
@@ -47,6 +49,8 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         }
 
         b.Line();
+        b.Line("#pragma warning disable CS0618");
+        b.Line();
 
         using (b.Block($"namespace {DtoNamespace}"))
         {
@@ -54,6 +58,9 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             b.Line();
             WriteResponseDto(b);
         }
+
+        b.Line();
+        b.Line("#pragma warning restore CS0618");
     }
 
     private void WriteParameterDto(CSharpCodeBuilder b)
@@ -328,7 +335,7 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             b.DocComment("Map from the domain object to the properties of the current DTO instance.");
             using (b.Block($"public void MapFrom({Model.FullyQualifiedName} obj, IMappingContext context, IncludeTree tree = null)"))
             {
-                b.Line("if (obj == null) return;");
+                b.Line("if (obj is null) return;");
 
                 var derivedTypes = Model.ClientDerivedTypes.ToList();
                 if (derivedTypes.Any())
@@ -459,18 +466,13 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         string setter;
         if (property.Type.IsDictionary)
         {
-            // Dictionaries aren't officially supported by Coalesce.
-            // This only supports dictionaries of types that require no type mapping.
-            // This is only a stop-gap to bridge apparent functionality that existed in 2.x versions
-            // of Coalesce where Dictionaries apparently "accidentally" worked to a limited extent.
-            // There is no frontend support at all.
-            setter = $"{name}?.ToDictionary(k => k.Key, v => v.Value)";
+            setter = DictionaryDtoToModelExpression(property.Type, name);
         }
         else if (property.Object != null)
         {
             if (property.Type.IsCollection)
             {
-                setter = $"{name}?.Select(f => f.MapToNew(context)).{(property.Type.IsArray ? "ToArray" : "ToList")}()";
+                setter = $"{name}?.Select(f => f.MapToNew(context)).{CollectionMaterializerForModel(property.Type)}()";
             }
             else if (modelVar != null)
             {
@@ -484,7 +486,7 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         else if (!property.Type.IsArray && property.Type.IsA(typeof(IList<>)))
         {
             // Lists of scalar values, whose DTO properties will be ICollection<>, preventing direct assignment.
-            setter = $"{name}?.ToList()";
+            setter = $"{name}?.{CollectionMaterializerForModel(property.Type)}()";
         }
         else
         {
@@ -515,7 +517,11 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             ? "" // If we hang an IClassDto off an external type, or another IClassDto, no mapping needed - it is already the desired type.
             : $".MapToDto<{property.Object.FullyQualifiedName}, {property.Object.ResponseDtoTypeName}>(context, tree?[nameof({dtoVar}.{name})])";
 
-        if (property.Type.IsCollection)
+        if (property.Type.IsDictionary)
+        {
+            setter = $"{dtoVar}.{name} = {DictionaryModelToDtoExpression(property.Type, $"obj.{name}")};";
+        }
+        else if (property.Type.IsCollection)
         {
             if (property.Object != null)
             {
@@ -614,5 +620,62 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
 
         var statement = GetPropertySetterConditional(property, property.SecurityInfo.Read, "obj");
         return (statement, setter);
+    }
+
+    private static bool IsImmutableDictionary(TypeViewModel type) =>
+        type.IsA(typeof(IImmutableDictionary<,>)) || type.IsA(typeof(ImmutableDictionary<,>));
+
+    private static bool IsImmutableList(TypeViewModel type) =>
+        type.IsA(typeof(IImmutableList<>)) || type.IsA(typeof(ImmutableList<>));
+
+    private static string CollectionMaterializerForModel(TypeViewModel type) =>
+        type.IsArray ? "ToArray" : IsImmutableList(type) ? "ToImmutableList" : "ToList";
+
+    private string DictionaryDtoToModelExpression(TypeViewModel type, string sourceExpression)
+    {
+        var args = type.GenericArgumentsFor(typeof(IDictionary<,>))
+            ?? throw new InvalidOperationException($"Dictionary type '{type}' is missing generic arguments.");
+
+        return $"{sourceExpression}?.{(IsImmutableDictionary(type) ? "ToImmutableDictionary" : "ToDictionary")}(k => k.Key, v => {DictionaryValueDtoToModelExpression(args[1], "v.Value")})";
+    }
+
+    private string DictionaryValueDtoToModelExpression(TypeViewModel type, string sourceExpression)
+    {
+        if (type.IsDictionary)
+        {
+            return DictionaryDtoToModelExpression(type, sourceExpression);
+        }
+
+        var pureType = type.PureType;
+        if (pureType.ClassViewModel is not null)
+        {
+            return $"{sourceExpression}?.MapToNew(context)";
+        }
+
+        return sourceExpression;
+    }
+
+    private string DictionaryModelToDtoExpression(TypeViewModel type, string sourceExpression)
+    {
+        var args = type.GenericArgumentsFor(typeof(IDictionary<,>))
+            ?? throw new InvalidOperationException($"Dictionary type '{type}' is missing generic arguments.");
+
+        return $"{sourceExpression}?.ToDictionary(k => k.Key, v => {DictionaryValueModelToDtoExpression(args[1], "v.Value")})";
+    }
+
+    private string DictionaryValueModelToDtoExpression(TypeViewModel type, string sourceExpression)
+    {
+        if (type.IsDictionary)
+        {
+            return $"({type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)}){DictionaryModelToDtoExpression(type, sourceExpression)}";
+        }
+
+        var pureType = type.PureType;
+        if (pureType.ClassViewModel is { } model)
+        {
+            return $"{sourceExpression}.MapToDto<{model.FullyQualifiedName}, {model.ResponseDtoTypeName}>(context)";
+        }
+
+        return sourceExpression;
     }
 }
