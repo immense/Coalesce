@@ -108,6 +108,17 @@ public class IncludeTreeTests
     }
 
     [Test]
+    public async Task IncludeTree_IncludeChildren_IncludesReferenceSummaryPaths()
+    {
+        var tree = db.Cases
+            .IncludeChildren(ReflectionRepositoryFactory.Reflection)
+            .GetIncludeTree();
+
+        await Assert.That(tree[nameof(Case.AssignedTo)]).IsNotNull();
+        await Assert.That(tree[nameof(Case.AssignedTo)][nameof(Person.Company)]).IsNotNull();
+    }
+
+    [Test]
     public async Task IncludeTree_CastedIncludes()
     {
         var tree = IncludeTree.QueryFor<AbstractModel>()
