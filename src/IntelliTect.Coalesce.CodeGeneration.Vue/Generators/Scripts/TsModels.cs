@@ -121,6 +121,12 @@ public class TsModels : StringBuilderFileGenerator<ReflectionRepository>
                 var typeString = GetModelPropertyType(prop);
                 b.Line($"{prop.JsVariable}: {typeString} | null");
             }
+            foreach (var prop in model.FlattenedResponseProperties)
+            {
+                b.DocComment(prop.LeafProperty.Comment ?? prop.LeafProperty.Description);
+                var typeString = new VueType(prop.Type.NullableValueUnderlyingType).TsType();
+                b.Line($"{prop.Name.ToCamelCase()}: {typeString} | null");
+            }
         }
 
         using (b.Block($"export class {name}"))

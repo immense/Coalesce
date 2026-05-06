@@ -826,6 +826,18 @@ export const Case = domain.types.Case = {
       },
       dontSerialize: true,
     },
+    assignedToName: {
+      name: "assignedToName",
+      displayName: "Assigned To Name",
+      type: "string",
+      role: "value",
+    },
+    reportedByCompanyName: {
+      name: "reportedByCompanyName",
+      displayName: "Reported By Company Name",
+      type: "string",
+      role: "value",
+    },
   },
   methods: {
     methodWithJsReservedParamName: {
@@ -3364,6 +3376,55 @@ export const EnumPk = domain.types.EnumPk = {
   dataSources: {
   },
 }
+export const FluentConfiguredEntity = domain.types.FluentConfiguredEntity = {
+  name: "FluentConfiguredEntity" as const,
+  displayName: "Fluent Configured Entity",
+  get displayProp() { return this.props.name }, 
+  type: "model",
+  controllerRoute: "FluentConfiguredEntity",
+  get keyProp() { return this.props.tenantScopedKey }, 
+  behaviorFlags: 7 as BehaviorFlags,
+  props: {
+    tenantScopedKey: {
+      name: "tenantScopedKey",
+      displayName: "Tenant Scoped Key",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    name: {
+      name: "name",
+      displayName: "Name",
+      type: "string",
+      role: "value",
+    },
+    ownedValue: {
+      name: "ownedValue",
+      displayName: "Owned Value",
+      type: "object",
+      get typeDef() { return (domain.types.FluentOwnedValueObject as ObjectType & { name: "FluentOwnedValueObject" }) },
+      role: "value",
+    },
+    convertedValue: {
+      name: "convertedValue",
+      displayName: "Converted Value",
+      type: "object",
+      get typeDef() { return (domain.types.FluentConvertedValueObject as ObjectType & { name: "FluentConvertedValueObject" }) },
+      role: "value",
+    },
+    complexValue: {
+      name: "complexValue",
+      displayName: "Complex Value",
+      type: "object",
+      get typeDef() { return (domain.types.FluentComplexValueObject as ObjectType & { name: "FluentComplexValueObject" }) },
+      role: "value",
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
 export const MultipleParents = domain.types.MultipleParents = {
   name: "MultipleParents" as const,
   displayName: "Multiple Parents",
@@ -4590,6 +4651,78 @@ export const RequiredInternalUseModel = domain.types.RequiredInternalUseModel = 
   dataSources: {
   },
 }
+export const SelfOwnedTenant = domain.types.SelfOwnedTenant = {
+  name: "SelfOwnedTenant" as const,
+  displayName: "Self Owned Tenant",
+  get displayProp() { return this.props.id }, 
+  type: "model",
+  controllerRoute: "SelfOwnedTenant",
+  get keyProp() { return this.props.id }, 
+  behaviorFlags: 7 as BehaviorFlags,
+  props: {
+    id: {
+      name: "id",
+      displayName: "Id",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    tenantId: {
+      name: "tenantId",
+      displayName: "Tenant Id",
+      type: "number",
+      role: "value",
+    },
+    ownerTenant: {
+      name: "ownerTenant",
+      displayName: "Owner Tenant",
+      type: "model",
+      get typeDef() { return (domain.types.SelfOwnedTenant as ModelType & { name: "SelfOwnedTenant" }) },
+      role: "value",
+      dontSerialize: true,
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
+export const SelfOwnedTenantConsumer = domain.types.SelfOwnedTenantConsumer = {
+  name: "SelfOwnedTenantConsumer" as const,
+  displayName: "Self Owned Tenant Consumer",
+  get displayProp() { return this.props.id }, 
+  type: "model",
+  controllerRoute: "SelfOwnedTenantConsumer",
+  get keyProp() { return this.props.id }, 
+  behaviorFlags: 7 as BehaviorFlags,
+  props: {
+    id: {
+      name: "id",
+      displayName: "Id",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    tenantId: {
+      name: "tenantId",
+      displayName: "Tenant Id",
+      type: "number",
+      role: "value",
+    },
+    ownerTenant: {
+      name: "ownerTenant",
+      displayName: "Owner Tenant",
+      type: "model",
+      get typeDef() { return (domain.types.SelfOwnedTenant as ModelType & { name: "SelfOwnedTenant" }) },
+      role: "value",
+      dontSerialize: true,
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
 export const Sibling = domain.types.Sibling = {
   name: "Sibling" as const,
   displayName: "Sibling",
@@ -5493,6 +5626,45 @@ export const ExternalTypeWithDtoProp = domain.types.ExternalTypeWithDtoProp = {
     },
   },
 }
+export const FluentComplexValueObject = domain.types.FluentComplexValueObject = {
+  name: "FluentComplexValueObject" as const,
+  displayName: "Fluent Complex Value Object",
+  type: "object",
+  props: {
+    value: {
+      name: "value",
+      displayName: "Value",
+      type: "string",
+      role: "value",
+    },
+  },
+}
+export const FluentConvertedValueObject = domain.types.FluentConvertedValueObject = {
+  name: "FluentConvertedValueObject" as const,
+  displayName: "Fluent Converted Value Object",
+  type: "object",
+  props: {
+    value: {
+      name: "value",
+      displayName: "Value",
+      type: "string",
+      role: "value",
+    },
+  },
+}
+export const FluentOwnedValueObject = domain.types.FluentOwnedValueObject = {
+  name: "FluentOwnedValueObject" as const,
+  displayName: "Fluent Owned Value Object",
+  type: "object",
+  props: {
+    value: {
+      name: "value",
+      displayName: "Value",
+      type: "string",
+      role: "value",
+    },
+  },
+}
 export const InitRecordWithDefaultCtor = domain.types.InitRecordWithDefaultCtor = {
   name: "InitRecordWithDefaultCtor" as const,
   displayName: "Init Record With Default Ctor",
@@ -6007,6 +6179,10 @@ interface AppDomain extends Domain {
     ExternalParentAsInputOnly: typeof ExternalParentAsInputOnly
     ExternalParentAsOutputOnly: typeof ExternalParentAsOutputOnly
     ExternalTypeWithDtoProp: typeof ExternalTypeWithDtoProp
+    FluentComplexValueObject: typeof FluentComplexValueObject
+    FluentConfiguredEntity: typeof FluentConfiguredEntity
+    FluentConvertedValueObject: typeof FluentConvertedValueObject
+    FluentOwnedValueObject: typeof FluentOwnedValueObject
     InitRecordWithDefaultCtor: typeof InitRecordWithDefaultCtor
     InputOutputOnlyExternalTypeWithRequiredNonscalarProp: typeof InputOutputOnlyExternalTypeWithRequiredNonscalarProp
     Location: typeof Location
@@ -6029,6 +6205,8 @@ interface AppDomain extends Domain {
     RecursiveHierarchy: typeof RecursiveHierarchy
     RequiredAndInitModel: typeof RequiredAndInitModel
     RequiredInternalUseModel: typeof RequiredInternalUseModel
+    SelfOwnedTenant: typeof SelfOwnedTenant
+    SelfOwnedTenantConsumer: typeof SelfOwnedTenantConsumer
     Sibling: typeof Sibling
     SimpleModelTarget: typeof SimpleModelTarget
     StandaloneReadonly: typeof StandaloneReadonly

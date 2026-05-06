@@ -1050,6 +1050,29 @@ export class EnumPkListViewModel extends ListViewModel<$models.EnumPk, $apiClien
 }
 
 
+export interface FluentConfiguredEntityViewModel extends $models.FluentConfiguredEntity {
+  tenantScopedKey: number | null;
+  name: string | null;
+  ownedValue: $models.FluentOwnedValueObject | null;
+  convertedValue: $models.FluentConvertedValueObject | null;
+  complexValue: $models.FluentComplexValueObject | null;
+}
+export class FluentConfiguredEntityViewModel extends ViewModel<$models.FluentConfiguredEntity, $apiClients.FluentConfiguredEntityApiClient, number> implements $models.FluentConfiguredEntity  {
+  
+  constructor(initialData?: DeepPartial<$models.FluentConfiguredEntity> | null) {
+    super($metadata.FluentConfiguredEntity, new $apiClients.FluentConfiguredEntityApiClient(), initialData)
+  }
+}
+defineProps(FluentConfiguredEntityViewModel, $metadata.FluentConfiguredEntity)
+
+export class FluentConfiguredEntityListViewModel extends ListViewModel<$models.FluentConfiguredEntity, $apiClients.FluentConfiguredEntityApiClient, FluentConfiguredEntityViewModel> {
+  
+  constructor() {
+    super($metadata.FluentConfiguredEntity, new $apiClients.FluentConfiguredEntityApiClient())
+  }
+}
+
+
 export interface MultipleParentsViewModel extends $models.MultipleParents {
   id: number | null;
   parent1Id: number | null;
@@ -1556,6 +1579,50 @@ export class RequiredInternalUseModelListViewModel extends ListViewModel<$models
 }
 
 
+export interface SelfOwnedTenantViewModel extends $models.SelfOwnedTenant {
+  id: number | null;
+  tenantId: number | null;
+  get ownerTenant(): SelfOwnedTenantViewModel | null;
+  set ownerTenant(value: SelfOwnedTenantViewModel | $models.SelfOwnedTenant | null);
+}
+export class SelfOwnedTenantViewModel extends ViewModel<$models.SelfOwnedTenant, $apiClients.SelfOwnedTenantApiClient, number> implements $models.SelfOwnedTenant  {
+  
+  constructor(initialData?: DeepPartial<$models.SelfOwnedTenant> | null) {
+    super($metadata.SelfOwnedTenant, new $apiClients.SelfOwnedTenantApiClient(), initialData)
+  }
+}
+defineProps(SelfOwnedTenantViewModel, $metadata.SelfOwnedTenant)
+
+export class SelfOwnedTenantListViewModel extends ListViewModel<$models.SelfOwnedTenant, $apiClients.SelfOwnedTenantApiClient, SelfOwnedTenantViewModel> {
+  
+  constructor() {
+    super($metadata.SelfOwnedTenant, new $apiClients.SelfOwnedTenantApiClient())
+  }
+}
+
+
+export interface SelfOwnedTenantConsumerViewModel extends $models.SelfOwnedTenantConsumer {
+  id: number | null;
+  tenantId: number | null;
+  get ownerTenant(): SelfOwnedTenantViewModel | null;
+  set ownerTenant(value: SelfOwnedTenantViewModel | $models.SelfOwnedTenant | null);
+}
+export class SelfOwnedTenantConsumerViewModel extends ViewModel<$models.SelfOwnedTenantConsumer, $apiClients.SelfOwnedTenantConsumerApiClient, number> implements $models.SelfOwnedTenantConsumer  {
+  
+  constructor(initialData?: DeepPartial<$models.SelfOwnedTenantConsumer> | null) {
+    super($metadata.SelfOwnedTenantConsumer, new $apiClients.SelfOwnedTenantConsumerApiClient(), initialData)
+  }
+}
+defineProps(SelfOwnedTenantConsumerViewModel, $metadata.SelfOwnedTenantConsumer)
+
+export class SelfOwnedTenantConsumerListViewModel extends ListViewModel<$models.SelfOwnedTenantConsumer, $apiClients.SelfOwnedTenantConsumerApiClient, SelfOwnedTenantConsumerViewModel> {
+  
+  constructor() {
+    super($metadata.SelfOwnedTenantConsumer, new $apiClients.SelfOwnedTenantConsumerApiClient())
+  }
+}
+
+
 export interface SiblingViewModel extends $models.Sibling {
   siblingId: number | null;
   personId: number | null;
@@ -1848,6 +1915,7 @@ const viewModelTypeLookup = ViewModel.typeLookup = {
   DateTimeOffsetPk: DateTimeOffsetPkViewModel,
   DateTimePk: DateTimePkViewModel,
   EnumPk: EnumPkViewModel,
+  FluentConfiguredEntity: FluentConfiguredEntityViewModel,
   MultipleParents: MultipleParentsViewModel,
   OneToOneManyChildren: OneToOneManyChildrenViewModel,
   OneToOneParent: OneToOneParentViewModel,
@@ -1862,6 +1930,8 @@ const viewModelTypeLookup = ViewModel.typeLookup = {
   RecursiveHierarchy: RecursiveHierarchyViewModel,
   RequiredAndInitModel: RequiredAndInitModelViewModel,
   RequiredInternalUseModel: RequiredInternalUseModelViewModel,
+  SelfOwnedTenant: SelfOwnedTenantViewModel,
+  SelfOwnedTenantConsumer: SelfOwnedTenantConsumerViewModel,
   Sibling: SiblingViewModel,
   StandaloneReadonly: StandaloneReadonlyViewModel,
   StandaloneReadWrite: StandaloneReadWriteViewModel,
@@ -1889,6 +1959,7 @@ const listViewModelTypeLookup = ListViewModel.typeLookup = {
   DateTimeOffsetPk: DateTimeOffsetPkListViewModel,
   DateTimePk: DateTimePkListViewModel,
   EnumPk: EnumPkListViewModel,
+  FluentConfiguredEntity: FluentConfiguredEntityListViewModel,
   MultipleParents: MultipleParentsListViewModel,
   OneToOneManyChildren: OneToOneManyChildrenListViewModel,
   OneToOneParent: OneToOneParentListViewModel,
@@ -1903,6 +1974,8 @@ const listViewModelTypeLookup = ListViewModel.typeLookup = {
   RecursiveHierarchy: RecursiveHierarchyListViewModel,
   RequiredAndInitModel: RequiredAndInitModelListViewModel,
   RequiredInternalUseModel: RequiredInternalUseModelListViewModel,
+  SelfOwnedTenant: SelfOwnedTenantListViewModel,
+  SelfOwnedTenantConsumer: SelfOwnedTenantConsumerListViewModel,
   Sibling: SiblingListViewModel,
   StandaloneReadonly: StandaloneReadonlyListViewModel,
   StandaloneReadWrite: StandaloneReadWriteListViewModel,
