@@ -57,6 +57,11 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             WriteParameterDto(b);
             b.Line();
             WriteResponseDto(b);
+            if (Model.ShouldGenerateSummaryDto)
+            {
+                b.Line();
+                WriteSummaryDto(b);
+            }
         }
 
         b.Line();
@@ -329,7 +334,7 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
 
             foreach (PropertyViewModel prop in ownProps)
             {
-                b.Line($"public {prop.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {prop.Name} {{ get; set; }}");
+                b.Line($"public {ResponsePropertyType(prop)} {prop.Name} {{ get; set; }}");
             }
 
             b.DocComment("Map from the domain object to the properties of the current DTO instance.");
@@ -358,6 +363,35 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
 
                 WriteSetters(b, orderedProps
                     .Select(ModelToDtoPropertySetter));
+            }
+        }
+    }
+
+    private void WriteSummaryDto(CSharpCodeBuilder b)
+    {
+        var primaryKey = Model.PrimaryKey
+            ?? throw new InvalidOperationException($"Summary DTO generation for {Model.FullyQualifiedName} requires a primary key.");
+
+        using (b.Block($"public partial class {Model.SummaryDtoTypeName} : IGeneratedResponseDto<{Model.FullyQualifiedName}>"))
+        {
+            b.Line($"public {Model.SummaryDtoTypeName}() {{ }}");
+            b.Line();
+            b.Line($"public {primaryKey.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {primaryKey.Name} {{ get; set; }}");
+
+            foreach (var prop in Model.SummaryProperties)
+            {
+                b.Line($"public {prop.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {prop.Name} {{ get; set; }}");
+            }
+
+            b.DocComment("Map from the domain object to the properties of the current summary DTO instance.");
+            using (b.Block($"public void MapFrom({Model.FullyQualifiedName} obj, IMappingContext context, IncludeTree tree = null)"))
+            {
+                b.Line("if (obj is null) return;");
+                b.Line($"this.{primaryKey.Name} = obj.{primaryKey.Name};");
+                foreach (var prop in Model.SummaryProperties)
+                {
+                    b.Line($"this.{prop.Name} = {prop.AccessExpression("obj")};");
+                }
             }
         }
     }
@@ -515,7 +549,7 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         string setter;
         string mapCall() => property.Object.IsCustomDto
             ? "" // If we hang an IClassDto off an external type, or another IClassDto, no mapping needed - it is already the desired type.
-            : $".MapToDto<{property.Object.FullyQualifiedName}, {property.Object.ResponseDtoTypeName}>(context, tree?[nameof({dtoVar}.{name})])";
+            : $".MapToDto<{property.Object.FullyQualifiedName}, {GetResponseDtoTypeName(property)}>(context, tree?[nameof({dtoVar}.{name})])";
 
         if (property.Type.IsDictionary)
         {
@@ -620,6 +654,26 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
 
         var statement = GetPropertySetterConditional(property, property.SecurityInfo.Read, "obj");
         return (statement, setter);
+    }
+
+    private string ResponsePropertyType(PropertyViewModel property)
+    {
+        if (property.UsesDtoReferenceSummary && property.Object is not null)
+        {
+            return $"{DtoNamespace}.{property.Object.SummaryDtoTypeName}";
+        }
+
+        return property.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace);
+    }
+
+    private string GetResponseDtoTypeName(PropertyViewModel property)
+    {
+        if (property.UsesDtoReferenceSummary && property.Object is not null)
+        {
+            return property.Object.SummaryDtoTypeName;
+        }
+
+        return property.Object.ResponseDtoTypeName;
     }
 
     private static bool IsImmutableDictionary(TypeViewModel type) =>

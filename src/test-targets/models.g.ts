@@ -210,7 +210,7 @@ export interface Case extends Model<typeof metadata.Case> {
   description: string | null
   openedAt: Date | null
   assignedToId: number | null
-  assignedTo: Person | null
+  assignedTo: PersonSummary | null
   reportedById: number | null
   reportedBy: Person | null
   attachment: string | null
@@ -1851,6 +1851,38 @@ export class WeatherData {
 }
 
 
+export interface PersonSummary extends Model<typeof metadata.PersonSummary> {
+  
+  /** ID for the person object. */
+  personId: number | null
+  
+  /** 
+    Calculated name of the person. eg., Mr. Michael Stokesbary.
+    A concatenation of Title, FirstName, and LastName.
+  */
+  name: string | null
+  companyName: string | null
+}
+export class PersonSummary {
+  
+  /** Mutates the input object and its descendants into a valid PersonSummary implementation. */
+  static convert(data?: Partial<PersonSummary>): PersonSummary {
+    return convertToModel<PersonSummary>(data || {}, metadata.PersonSummary) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid PersonSummary implementation. */
+  static map(data?: Partial<PersonSummary>): PersonSummary {
+    return mapToModel<PersonSummary>(data || {}, metadata.PersonSummary) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.PersonSummary; }
+  
+  /** Instantiate a new PersonSummary, optionally basing it on the given data. */
+  constructor(data?: Partial<PersonSummary> | {[k: string]: any}) {
+    Object.assign(this, PersonSummary.map(data || {}));
+  }
+}
+
 declare module "coalesce-vue/lib/model" {
   interface EnumTypeLookup {
     EnumPkId: EnumPkId
@@ -1921,5 +1953,6 @@ declare module "coalesce-vue/lib/model" {
     ValidationTargetChild: ValidationTargetChild
     WeatherData: WeatherData
     ZipCode: ZipCode
+    PersonSummary: PersonSummary
   }
 }

@@ -14,6 +14,7 @@ namespace IntelliTect.Coalesce.Testing.TargetClasses.TestDbContext;
 
 [Edit(PermissionLevel = SecurityPermissionLevels.AllowAll)]
 [Table("Person")]
+[DtoSummary("Company.Name")]
 public class Person
 {
     public enum Genders
