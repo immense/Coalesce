@@ -89,6 +89,16 @@ public class GenerationExecutor
         Logger.LogInformation("Loading Projects:");
         await LoadProjects(Logger, genContext);
 
+        if (genContext.DataProject is RoslynProjectContext dataProject
+            && dataProject.MsBuildProjectContext.AssemblyFullPath is { Length: > 0 } assemblyPath
+            && File.Exists(assemblyPath))
+        {
+            ReflectionRepository.Global.EntityFrameworkMetadata =
+                new RuntimeEntityFrameworkMetadataProvider(
+                    ReflectionRepository.Global,
+                    new ProjectAssemblyTypeResolver(dataProject.MsBuildProjectContext).Resolve);
+        }
+
         var locator = genContext.DataProject.TypeLocator as RoslynTypeLocator;
         var npmPackageVersionTask = ServiceProvider.GetRequiredService<NpmDependencyAnalayzer>().GetNpmPackageVersion("coalesce-vue");
 

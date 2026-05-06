@@ -416,6 +416,9 @@ public abstract class PropertyViewModel : ValueViewModel
     /// </summary>
     public bool IsId => IsPrimaryKey || IsForeignKey;
 
+    internal EntityFrameworkPropertyKind? EntityFrameworkPropertyKind
+        => EffectiveParent.ReflectionRepository?.EntityFrameworkMetadata.GetPropertyKind(this);
+
     /// <summary>
     /// Returns true if this is the primary key for this object.
     /// </summary>
@@ -433,6 +436,11 @@ public abstract class PropertyViewModel : ValueViewModel
             else if (string.Equals(Name, Parent.Name + ConventionalIdSuffix, StringComparison.OrdinalIgnoreCase))
                 return true;
             else if (string.Equals(Name, Parent.DtoBaseViewModel?.PrimaryKey?.Name, StringComparison.OrdinalIgnoreCase))
+                return true;
+            else if (string.Equals(
+                Name,
+                EffectiveParent.ReflectionRepository?.EntityFrameworkMetadata.GetSinglePrimaryKeyPropertyName(EffectiveParent),
+                StringComparison.OrdinalIgnoreCase))
                 return true;
             return false;
 
