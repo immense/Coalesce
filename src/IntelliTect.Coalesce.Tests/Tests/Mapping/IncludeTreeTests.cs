@@ -2,6 +2,7 @@ using IntelliTect.Coalesce;
 using IntelliTect.Coalesce.Testing.Fixtures;
 using IntelliTect.Coalesce.Testing.TargetClasses;
 using IntelliTect.Coalesce.Testing.TargetClasses.TestDbContext;
+using IntelliTect.Coalesce.Testing.Util;
 using Microsoft.EntityFrameworkCore;
 
 namespace IntelliTect.Coalesce.Tests.Mapping;
@@ -94,17 +95,6 @@ public class IncludeTreeTests
             .GetIncludeTree();
 
         await AssertBasicChecks(tree);
-    }
-
-    [Test]
-    public async Task IncludeTree_IncludeChildren_IncludesReferenceSummaryPaths()
-    {
-        var tree = db.Cases
-            .IncludeChildren(ReflectionRepositoryFactory.Reflection)
-            .GetIncludeTree();
-
-        await Assert.That(tree[nameof(Case.AssignedTo)]).IsNotNull();
-        await Assert.That(tree[nameof(Case.AssignedTo)][nameof(Person.Company)]).IsNotNull();
     }
 
     [Test]

@@ -36,6 +36,13 @@ internal static class ValidateContext
 
             assert.NoDuplicates(model.ClientProperties, p => p.Name, StringComparer.OrdinalIgnoreCase);
             assert.NoDuplicates(model.ClientProperties, p => p.JsonName, StringComparer.OrdinalIgnoreCase);
+            assert.NoDuplicates(model.FlattenedResponseProperties, p => p.Name, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var flattened in model.FlattenedResponseProperties)
+            {
+                assert.IsTrue(model.PropertyByName(flattened.Name) is null,
+                    $"[{nameof(DtoFlattenAttribute)}] generates property '{flattened.Name}', which conflicts with an existing property.");
+            }
 
             foreach (var prop in model.ClientProperties)
             {
@@ -43,12 +50,26 @@ internal static class ValidateContext
 
                 assert.IsFalse(prop.Type.IsFile, "IFile is not supported as a property.");
 
+                if (prop.UsesDtoReferenceSummary)
+                {
+                    assert.IsTrue(prop.Role == PropertyRole.ReferenceNavigation,
+                        $"[{nameof(DtoReferenceAttribute)}] can only be used on reference navigation properties.");
+                    assert.IsNotNull(prop.Object,
+                        $"[{nameof(DtoReferenceAttribute)}] requires a related object type.");
+                    assert.IsNotNull(prop.Object?.PrimaryKey,
+                        $"[{nameof(DtoReferenceAttribute)}] requires the target type to have a primary key.");
+                }
+
                 if (prop.DateType == DateTypeAttribute.DateTypes.TimeOnly)
                 {
                     assert.IsTrue(prop.PureType.IsA<TimeOnly>(), "Time-only properties should be of type System.TimeOnly.", isWarning: true);
                 }
             }
+
+            ValidateSummaryModel(repository, classNames, model, assert);
         }
+
+        ValidateSummaryTypeNames(repository, assert);
 
 
         foreach (var model in repository.CrudApiBackedClasses)
@@ -325,6 +346,44 @@ internal static class ValidateContext
         }
 
         return assert;
+    }
 
+    private static void ValidateSummaryModel(
+        ReflectionRepository repository,
+        ISet<string> classNames,
+        ClassViewModel model,
+        ValidationHelper assert)
+    {
+        assert.NoDuplicates(model.SummaryProperties, p => p.Name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var summary in model.SummaryProperties)
+        {
+            assert.IsTrue(model.PrimaryKey?.Name != summary.Name,
+                $"[{nameof(DtoSummaryAttribute)}] generates property '{summary.Name}', which conflicts with the primary key.");
+        }
+
+        if (!model.ShouldGenerateSummaryDto)
+        {
+            return;
+        }
+
+        assert.IsNotNull(model.PrimaryKey,
+            $"Summary DTO generation for {model} requires a primary key.");
+        assert.IsFalse(classNames.Contains(model.SummaryViewModelClassName),
+            $"Summary type '{model.SummaryViewModelClassName}' conflicts with an existing class name.");
+        assert.IsFalse(repository.ClientEnums.Any(e => string.Equals(e.ClientTypeName, model.SummaryViewModelClassName, StringComparison.OrdinalIgnoreCase)),
+            $"Summary type '{model.SummaryViewModelClassName}' conflicts with an existing enum name.");
+    }
+
+    private static void ValidateSummaryTypeNames(ReflectionRepository repository, ValidationHelper assert)
+    {
+        foreach (var group in repository.ClientClasses
+            .Where(m => m.ShouldGenerateSummaryDto)
+            .GroupBy(m => m.SummaryViewModelClassName, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1))
+        {
+            assert.IsTrue(false,
+                $"Summary type '{group.Key}' would produce duplicate TypeScript exports.");
+        }
     }
 }
