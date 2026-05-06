@@ -47,6 +47,7 @@ public class Case
 
     public int? AssignedToId { get; set; }
 
+    [DtoReference]
     [ForeignKey("AssignedToId")]
     public Person AssignedTo { get; set; }
 

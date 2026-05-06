@@ -49,6 +49,11 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
             WriteExternalTypeMetadata(b, model);
         }
 
+        foreach (var model in Model.ClientClasses.Where(m => m.ShouldGenerateSummaryDto).OrderBy(e => e.ClientTypeName))
+        {
+            WriteSummaryTypeMetadata(b, model);
+        }
+
         foreach (var model in Model.Services.OrderBy(e => e.ClientTypeName))
         {
             WriteServiceMetadata(b, model);
@@ -70,6 +75,10 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
                 foreach (var model in Model.ClientClasses.OrderBy(e => e.ClientTypeName))
                 {
                     b.Line($"{model.ClientTypeName}: typeof {model.ClientTypeName}");
+                }
+                foreach (var model in Model.ClientClasses.Where(m => m.ShouldGenerateSummaryDto).OrderBy(e => e.ClientTypeName))
+                {
+                    b.Line($"{model.SummaryViewModelClassName}: typeof {model.SummaryViewModelClassName}");
                 }
             }
             using (b.Block("services:"))
@@ -175,6 +184,37 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
         }
     }
 
+    private void WriteSummaryTypeMetadata(TypeScriptCodeBuilder b, ClassViewModel model)
+    {
+        using (b.Block($"export const {model.SummaryViewModelClassName} = domain.types.{model.SummaryViewModelClassName} ="))
+        {
+            b.StringProp("name", model.SummaryViewModelClassName, asConst: true);
+            b.StringProp("displayName", model.DisplayName + " Summary");
+
+            if (!string.IsNullOrWhiteSpace(model.Description))
+            {
+                b.StringProp("description", model.Description);
+            }
+
+            b.StringProp("type", "object");
+
+            if (model.SummaryProperties.FirstOrDefault() is { } displayProp)
+            {
+                b.Line($"get displayProp() {{ return this.props.{displayProp.Name.ToCamelCase()} }}, ");
+            }
+
+            using (b.Block("props:", ','))
+            {
+                WriteSummaryPrimaryKeyMetadata(b, model.PrimaryKey!);
+
+                foreach (var prop in model.SummaryProperties)
+                {
+                    WriteSummaryPropertyMetadata(b, prop);
+                }
+            }
+        }
+    }
+
     private void WriteEnumMetadata(TypeScriptCodeBuilder b, TypeViewModel model)
     {
         using (b.Block($"export const {model.ClientTypeName} = domain.enums.{model.ClientTypeName} ="))
@@ -243,78 +283,91 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
         return $"(domain.types.{obj.ViewModelClassName} as {(obj.IsDbMappedType ? "ModelType" : "ObjectType")} & {{ name: \"{obj.ClientTypeName}\" }})";
     }
 
+    private static string GetSummaryMetadataRef(ClassViewModel obj)
+        => $"(domain.types.{obj.SummaryViewModelClassName} as ObjectType & {{ name: \"{obj.SummaryViewModelClassName}\" }})";
+
     private void WriteClassPropertyMetadata(TypeScriptCodeBuilder b, ClassViewModel model, PropertyViewModel prop)
     {
         using (b.Block($"{prop.JsVariable}:", ','))
         {
-            WriteValueCommonMetadata(b, prop);
-
-            switch (prop.Role)
+            if (prop.UsesDtoReferenceSummary && prop.Object is not null)
             {
-                case PropertyRole.PrimaryKey:
-                    // TS Type: "PrimaryKeyProperty"
-                    b.StringProp("role", "primaryKey");
-                    break;
+                WriteValueIdentityMetadata(b, prop);
+                b.StringProp("type", "object");
+                b.Line($"get typeDef() {{ return {GetSummaryMetadataRef(prop.Object)} }},");
+                b.StringProp("role", "value");
+            }
+            else
+            {
+                WriteValueCommonMetadata(b, prop);
 
-                case PropertyRole.ForeignKey:
-                    // TS Type: "ForeignKeyProperty"
-                    var principal = prop.ForeignKeyPrincipalType;
-                    b.StringProp("role", "foreignKey");
-                    b.Line($"get principalKey() {{ return {GetClassMetadataRef(principal)}.props.{principal.PrimaryKey.JsVariable} as PrimaryKeyProperty }},");
-                    b.Line($"get principalType() {{ return {GetClassMetadataRef(principal)} }},");
+                switch (prop.Role)
+                {
+                    case PropertyRole.PrimaryKey:
+                        // TS Type: "PrimaryKeyProperty"
+                        b.StringProp("role", "primaryKey");
+                        break;
 
-                    if (prop.ReferenceNavigationProperty is { } navProp)
-                    {
-                        b.Line($"get navigationProp() {{ return {GetClassMetadataRef(model)}.props.{navProp.JsVariable} as ModelReferenceNavigationProperty }},");
-                    }
-                    break;
+                    case PropertyRole.ForeignKey:
+                        // TS Type: "ForeignKeyProperty"
+                        var principal = prop.ForeignKeyPrincipalType;
+                        b.StringProp("role", "foreignKey");
+                        b.Line($"get principalKey() {{ return {GetClassMetadataRef(principal)}.props.{principal.PrimaryKey.JsVariable} as PrimaryKeyProperty }},");
+                        b.Line($"get principalType() {{ return {GetClassMetadataRef(principal)} }},");
 
-                case PropertyRole.ReferenceNavigation:
-                    // TS Type: "ModelReferenceNavigationProperty"
-                    b.StringProp("role", "referenceNavigation");
-                    // Note: `prop.ForeignKeyProperty.Role` might be PrimaryKey, not ForeignKey, in the case of 1-to-1 relationships.
-                    b.Line($"get foreignKey() {{ return {GetClassMetadataRef(model)}.props.{prop.ForeignKeyProperty.JsVariable} as {prop.ForeignKeyProperty.Role}Property }},");
-                    b.Line($"get principalKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.Object.PrimaryKey.JsVariable} as PrimaryKeyProperty }},");
-
-                    if (prop.InverseProperty != null)
-                    {
-                        b.Line($"get inverseNavigation() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.InverseProperty.JsVariable} as ModelCollectionNavigationProperty }},");
-                    }
-
-                    break;
-
-                case PropertyRole.CollectionNavigation:
-                    // TS Type: "ModelCollectionNavigationProperty"
-                    b.StringProp("role", "collectionNavigation");
-                    b.Line($"get foreignKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.ForeignKeyProperty.JsVariable} as ForeignKeyProperty }},");
-
-                    if (prop.InverseProperty != null)
-                    {
-                        b.Line($"get inverseNavigation() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.InverseProperty.JsVariable} as ModelReferenceNavigationProperty }},");
-                    }
-
-                    if (prop.IsManyToManyCollection)
-                    {
-                        using (b.Block("manyToMany:", ","))
+                        if (prop.ReferenceNavigationProperty is { } navProp)
                         {
-                            var nearNavigation = prop.ManyToManyNearNavigationProperty;
-                            var farNavigation = prop.ManyToManyFarNavigationProperty;
-
-                            b.StringProp("name", prop.ManyToManyCollectionName.ToCamelCase());
-                            b.StringProp("displayName", prop.ManyToManyCollectionName.ToProperCase());
-                            b.Line($"get typeDef() {{ return {GetClassMetadataRef(farNavigation.Object)} }},");
-                            b.Line($"get farForeignKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{farNavigation.ForeignKeyProperty.JsVariable} as ForeignKeyProperty }},");
-                            b.Line($"get farNavigationProp() {{ return {GetClassMetadataRef(prop.Object)}.props.{farNavigation.JsVariable} as ModelReferenceNavigationProperty }},");
-                            b.Line($"get nearForeignKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{nearNavigation.ForeignKeyProperty.JsVariable} as ForeignKeyProperty }},");
-                            b.Line($"get nearNavigationProp() {{ return {GetClassMetadataRef(prop.Object)}.props.{nearNavigation.JsVariable} as ModelReferenceNavigationProperty }},");
+                            b.Line($"get navigationProp() {{ return {GetClassMetadataRef(model)}.props.{navProp.JsVariable} as ModelReferenceNavigationProperty }},");
                         }
-                    }
+                        break;
 
-                    break;
+                    case PropertyRole.ReferenceNavigation:
+                        // TS Type: "ModelReferenceNavigationProperty"
+                        b.StringProp("role", "referenceNavigation");
+                        // Note: `prop.ForeignKeyProperty.Role` might be PrimaryKey, not ForeignKey, in the case of 1-to-1 relationships.
+                        b.Line($"get foreignKey() {{ return {GetClassMetadataRef(model)}.props.{prop.ForeignKeyProperty.JsVariable} as {prop.ForeignKeyProperty.Role}Property }},");
+                        b.Line($"get principalKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.Object.PrimaryKey.JsVariable} as PrimaryKeyProperty }},");
 
-                default:
-                    b.StringProp("role", "value");
-                    break;
+                        if (prop.InverseProperty != null)
+                        {
+                            b.Line($"get inverseNavigation() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.InverseProperty.JsVariable} as ModelCollectionNavigationProperty }},");
+                        }
+
+                        break;
+
+                    case PropertyRole.CollectionNavigation:
+                        // TS Type: "ModelCollectionNavigationProperty"
+                        b.StringProp("role", "collectionNavigation");
+                        b.Line($"get foreignKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.ForeignKeyProperty.JsVariable} as ForeignKeyProperty }},");
+
+                        if (prop.InverseProperty != null)
+                        {
+                            b.Line($"get inverseNavigation() {{ return {GetClassMetadataRef(prop.Object)}.props.{prop.InverseProperty.JsVariable} as ModelReferenceNavigationProperty }},");
+                        }
+
+                        if (prop.IsManyToManyCollection)
+                        {
+                            using (b.Block("manyToMany:", ","))
+                            {
+                                var nearNavigation = prop.ManyToManyNearNavigationProperty;
+                                var farNavigation = prop.ManyToManyFarNavigationProperty;
+
+                                b.StringProp("name", prop.ManyToManyCollectionName.ToCamelCase());
+                                b.StringProp("displayName", prop.ManyToManyCollectionName.ToProperCase());
+                                b.Line($"get typeDef() {{ return {GetClassMetadataRef(farNavigation.Object)} }},");
+                                b.Line($"get farForeignKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{farNavigation.ForeignKeyProperty.JsVariable} as ForeignKeyProperty }},");
+                                b.Line($"get farNavigationProp() {{ return {GetClassMetadataRef(prop.Object)}.props.{farNavigation.JsVariable} as ModelReferenceNavigationProperty }},");
+                                b.Line($"get nearForeignKey() {{ return {GetClassMetadataRef(prop.Object)}.props.{nearNavigation.ForeignKeyProperty.JsVariable} as ForeignKeyProperty }},");
+                                b.Line($"get nearNavigationProp() {{ return {GetClassMetadataRef(prop.Object)}.props.{nearNavigation.JsVariable} as ModelReferenceNavigationProperty }},");
+                            }
+                        }
+
+                        break;
+
+                    default:
+                        b.StringProp("role", "value");
+                        break;
+                }
             }
 
             int hiddenAreaFlags = (int)prop.HiddenAreas;
@@ -375,6 +428,32 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
                     }
                 }
             }
+        }
+    }
+
+    private void WriteSummaryPrimaryKeyMetadata(TypeScriptCodeBuilder b, PropertyViewModel prop)
+    {
+        using (b.Block($"{prop.JsVariable}:", ','))
+        {
+            WriteValueCommonMetadata(b, prop);
+            b.StringProp("role", "primaryKey");
+        }
+    }
+
+    private void WriteSummaryPropertyMetadata(TypeScriptCodeBuilder b, SummaryPropertyViewModel prop)
+    {
+        using (b.Block($"{prop.Name.ToCamelCase()}:", ','))
+        {
+            b.StringProp("name", prop.Name.ToCamelCase());
+            b.StringProp("displayName", prop.DisplayName);
+
+            if (!string.IsNullOrWhiteSpace(prop.LeafProperty.Description))
+            {
+                b.StringProp("description", prop.LeafProperty.Description);
+            }
+
+            WriteTypeCommonMetadata(b, prop.Type, prop.LeafProperty);
+            b.StringProp("role", "value");
         }
     }
 
@@ -678,6 +757,12 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
     /// </summary>
     private void WriteValueCommonMetadata(TypeScriptCodeBuilder b, ValueViewModel value)
     {
+        WriteValueIdentityMetadata(b, value);
+        WriteTypeCommonMetadata(b, value.Type, value);
+    }
+
+    private void WriteValueIdentityMetadata(TypeScriptCodeBuilder b, ValueViewModel value)
+    {
         b.StringProp("name", value.JsVariable);
         b.StringProp("displayName", value.DisplayName);
 
@@ -686,7 +771,6 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
             b.StringProp("description", value.Description);
         }
 
-        WriteTypeCommonMetadata(b, value.Type, value);
         WriteCustomMetadata(b, value);
     }
 

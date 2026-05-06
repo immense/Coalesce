@@ -50,6 +50,13 @@ public class TsModels : StringBuilderFileGenerator<ReflectionRepository>
             WriteModel(b, model, written);
         }
 
+        foreach (var model in Model.ClientClasses
+            .Where(m => m.ShouldGenerateSummaryDto)
+            .OrderBy(e => e.ClientTypeName))
+        {
+            WriteSummaryModel(b, model);
+        }
+
 
         using (b.Block("declare module \"coalesce-vue/lib/model\""))
         {
@@ -66,6 +73,10 @@ public class TsModels : StringBuilderFileGenerator<ReflectionRepository>
                 foreach (var model in Model.ClientClasses.OrderBy(e => e.ClientTypeName))
                 {
                     b.Line($"{model.ClientTypeName}: {model.ClientTypeName}");
+                }
+                foreach (var model in Model.ClientClasses.Where(m => m.ShouldGenerateSummaryDto).OrderBy(e => e.ClientTypeName))
+                {
+                    b.Line($"{model.SummaryViewModelClassName}: {model.SummaryViewModelClassName}");
                 }
             }
         }
@@ -107,7 +118,7 @@ public class TsModels : StringBuilderFileGenerator<ReflectionRepository>
             foreach (var prop in model.ClientProperties)
             {
                 b.DocComment(prop.Comment ?? prop.Description);
-                var typeString = new VueType(prop.Type.NullableValueUnderlyingType).TsType();
+                var typeString = GetModelPropertyType(prop);
                 b.Line($"{prop.JsVariable}: {typeString} | null");
             }
         }
@@ -191,5 +202,61 @@ public class TsModels : StringBuilderFileGenerator<ReflectionRepository>
         {
             b.Line($"static {value.Name.ToCamelCase()} = {value.ValueLiteralForTypeScript("")}");
         }
+    }
+
+    private void WriteSummaryModel(TypeScriptCodeBuilder b, ClassViewModel model)
+    {
+        var name = model.SummaryViewModelClassName;
+
+        using (b.Block($"export interface {name} extends Model<typeof metadata.{name}>"))
+        {
+            var primaryKey = model.PrimaryKey
+                ?? throw new InvalidOperationException($"Summary model generation for {model.FullyQualifiedName} requires a primary key.");
+
+            b.DocComment(primaryKey.Comment ?? primaryKey.Description);
+            b.Line($"{primaryKey.JsVariable}: {new VueType(primaryKey.Type.NullableValueUnderlyingType).TsType()} | null");
+
+            foreach (var prop in model.SummaryProperties)
+            {
+                b.DocComment(prop.LeafProperty.Comment ?? prop.LeafProperty.Description);
+                b.Line($"{prop.Name.ToCamelCase()}: {new VueType(prop.Type.NullableValueUnderlyingType).TsType()} | null");
+            }
+        }
+
+        using (b.Block($"export class {name}"))
+        {
+            b.DocComment($"Mutates the input object and its descendants into a valid {name} implementation.");
+            using (b.Block($"static convert(data?: Partial<{name}>): {name}"))
+            {
+                b.Line($"return convertToModel<{name}>(data || {{}}, metadata.{name}) ");
+            }
+
+            b.DocComment($"Maps the input object and its descendants to a new, valid {name} implementation.");
+            using (b.Block($"static map(data?: Partial<{name}>): {name}"))
+            {
+                b.Line($"return mapToModel<{name}>(data || {{}}, metadata.{name}) ");
+            }
+
+            b.Line();
+            b.Line($"static [Symbol.hasInstance](x: any) {{ return x?.$metadata === metadata.{name}; }}");
+
+            b.DocComment($"Instantiate a new {name}, optionally basing it on the given data.");
+            using (b.Block($"constructor(data?: Partial<{name}> | {{[k: string]: any}})"))
+            {
+                b.Line($"Object.assign(this, {name}.map(data || {{}}));");
+            }
+        }
+
+        b.Line();
+    }
+
+    private string GetModelPropertyType(PropertyViewModel prop)
+    {
+        if (prop.UsesDtoReferenceSummary && prop.Object is not null)
+        {
+            return prop.Object.SummaryViewModelClassName;
+        }
+
+        return new VueType(prop.Type.NullableValueUnderlyingType).TsType();
     }
 }

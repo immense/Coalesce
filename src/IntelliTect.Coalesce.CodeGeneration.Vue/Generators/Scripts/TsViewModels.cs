@@ -82,9 +82,7 @@ public class TsViewModels : StringBuilderFileGenerator<ReflectionRepository>
             foreach (var prop in model.ClientProperties)
             {
                 b.DocComment(prop.Comment ?? prop.Description);
-                var vueType = new VueType(prop.Type.NullableValueUnderlyingType);
-                var typeString = vueType.TsType(modelPrefix: "$models", viewModel: true);
-                var modelTypeString = vueType.TsType(modelPrefix: "$models", viewModel: false);
+                var (typeString, modelTypeString) = GetPropertyTsTypes(prop);
 
                 if (typeString == modelTypeString)
                 {
@@ -166,6 +164,21 @@ public class TsViewModels : StringBuilderFileGenerator<ReflectionRepository>
         }
         b.Line($"defineProps({viewModelName}, $metadata.{name})");
         b.Line();
+    }
+
+    private static (string typeString, string modelTypeString) GetPropertyTsTypes(PropertyViewModel prop)
+    {
+        if (prop.UsesDtoReferenceSummary && prop.Object is not null)
+        {
+            var summaryType = $"$models.{prop.Object.SummaryViewModelClassName}";
+            return (summaryType, summaryType);
+        }
+
+        var vueType = new VueType(prop.Type.NullableValueUnderlyingType);
+        return (
+            vueType.TsType(modelPrefix: "$models", viewModel: true),
+            vueType.TsType(modelPrefix: "$models", viewModel: false)
+        );
     }
 
     private void WriteListViewModel(TypeScriptCodeBuilder b, ClassViewModel model)

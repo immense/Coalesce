@@ -129,6 +129,10 @@ public abstract class PropertyViewModel : ValueViewModel
     /// </summary>
     public ClassViewModel? Object => PureType.ClassViewModel;
 
+    public bool UsesDtoReferenceSummary =>
+        Role == PropertyRole.ReferenceNavigation &&
+        this.HasAttribute<DtoReferenceAttribute>();
+
     /// <summary>
     /// Returns true if this property is a collection and has the ManyToMany Attribute 
     /// </summary>

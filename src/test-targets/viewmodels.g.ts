@@ -234,8 +234,7 @@ export interface CaseViewModel extends $models.Case {
   description: string | null;
   openedAt: Date | null;
   assignedToId: number | null;
-  get assignedTo(): PersonViewModel | null;
-  set assignedTo(value: PersonViewModel | $models.Person | null);
+  assignedTo: $models.PersonSummary | null;
   reportedById: number | null;
   get reportedBy(): PersonViewModel | null;
   set reportedBy(value: PersonViewModel | $models.Person | null);

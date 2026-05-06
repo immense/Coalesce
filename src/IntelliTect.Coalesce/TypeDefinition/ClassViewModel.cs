@@ -146,6 +146,10 @@ public abstract class ClassViewModel : IAttributeProvider
     /// </summary>
     public string ListViewModelClassName => ClientTypeName + "List";
 
+    public string SummaryViewModelClassName => ClientTypeName + "Summary";
+
+    public string SummaryDtoTypeName => SummaryViewModelClassName + "Response";
+
     public bool IsService => this.HasAttribute<CoalesceAttribute>() && this.HasAttribute<ServiceAttribute>();
     public bool IsStandaloneEntity => this.HasAttribute<CoalesceAttribute>() && this.HasAttribute<StandaloneEntityAttribute>();
 
@@ -262,6 +266,16 @@ public abstract class ClassViewModel : IAttributeProvider
         if (string.IsNullOrEmpty(key)) return null;
         return Properties.FirstOrDefault(f => string.Equals(f.Name, key, StringComparison.OrdinalIgnoreCase));
     }
+
+    private IReadOnlyList<SummaryPropertyViewModel>? _summaryProperties;
+    public IReadOnlyList<SummaryPropertyViewModel> SummaryProperties
+        => _summaryProperties ??= SummaryPropertyViewModel.FromClass(this);
+
+    private bool? _shouldGenerateSummaryDto;
+    public bool ShouldGenerateSummaryDto
+        => _shouldGenerateSummaryDto ??= ReflectionRepository?.ClientClasses
+            .SelectMany(c => c.ClientProperties)
+            .Any(p => p.UsesDtoReferenceSummary && p.Object == this) == true;
 
     /// <summary>
     /// Returns a client method matching the name if it exists.
