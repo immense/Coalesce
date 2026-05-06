@@ -81,7 +81,9 @@ internal sealed class RuntimeEntityFrameworkMetadataProvider : IEntityFrameworkM
 
         foreach (var contextUsage in _repository.DbContexts)
         {
-            var contextType = _typeResolver(contextUsage.ClassViewModel.Type.VerboseFullyQualifiedName);
+            var verboseContextName = contextUsage.ClassViewModel.Type.VerboseFullyQualifiedName;
+            var contextType = (contextUsage.ClassViewModel.Type as ReflectionTypeViewModel)?.Info
+                ?? _typeResolver(verboseContextName);
             if (contextType is null || !typeof(DbContext).IsAssignableFrom(contextType))
             {
                 continue;
@@ -117,10 +119,14 @@ internal sealed class RuntimeEntityFrameworkMetadataProvider : IEntityFrameworkM
 
             var classMetadata = GetOrCreateClassMetadata(metadata, clrType);
 
-            if (entityType.FindPrimaryKey() is { Properties.Count: 1 } primaryKey
+            if (entityType.FindPrimaryKey() is { Properties.Count: > 0 } primaryKey
                 && primaryKey.Properties[0].PropertyInfo is { } primaryKeyProperty)
             {
                 classMetadata.SinglePrimaryKeyPropertyName ??= primaryKeyProperty.Name;
+            }
+            else if (entityType.GetProperties().FirstOrDefault(property => property.PropertyInfo is not null)?.PropertyInfo is { } fallbackProperty)
+            {
+                classMetadata.SinglePrimaryKeyPropertyName ??= fallbackProperty.Name;
             }
 
             foreach (var property in entityType.GetProperties())
@@ -152,7 +158,7 @@ internal sealed class RuntimeEntityFrameworkMetadataProvider : IEntityFrameworkM
         Dictionary<string, EntityFrameworkClassMetadata> metadata,
         Type clrType)
     {
-        var verboseName = new ReflectionTypeViewModel(clrType).VerboseFullyQualifiedName;
+        var verboseName = GetVerboseTypeName(clrType);
         if (!metadata.TryGetValue(verboseName, out var classMetadata))
         {
             classMetadata = new EntityFrameworkClassMetadata();
@@ -175,18 +181,55 @@ internal sealed class RuntimeEntityFrameworkMetadataProvider : IEntityFrameworkM
 
     private static DbContext? TryCreateDbContext(Type contextType)
     {
-        var parameterlessCtor = contextType.GetConstructor(Type.EmptyTypes);
-        if (parameterlessCtor?.Invoke(null) is DbContext context)
+        foreach (var options in CreateDbContextOptionsCandidates(contextType))
         {
-            return context;
+            if (TryInstantiateDbContext(contextType, options) is { } dbContext)
+            {
+                try
+                {
+                    _ = dbContext.Model;
+                    return dbContext;
+                }
+                catch
+                {
+                    dbContext.Dispose();
+                }
+            }
         }
 
-        var options = CreateDbContextOptions(contextType);
-        if (options is null)
+        var parameterlessCtor = contextType.GetConstructor(Type.EmptyTypes);
+        if (parameterlessCtor?.Invoke(null) is not DbContext parameterlessContext)
         {
             return null;
         }
 
+        try
+        {
+            _ = parameterlessContext.Model;
+            return parameterlessContext;
+        }
+        catch
+        {
+            parameterlessContext.Dispose();
+            return null;
+        }
+    }
+
+    private static IEnumerable<DbContextOptions> CreateDbContextOptionsCandidates(Type contextType)
+    {
+        if (CreateDbContextOptions(contextType, TryConfigureSqlite) is { } sqliteOptions)
+        {
+            yield return sqliteOptions;
+        }
+
+        if (CreateDbContextOptions(contextType, TryConfigureInMemory) is { } inMemoryOptions)
+        {
+            yield return inMemoryOptions;
+        }
+    }
+
+    private static DbContext? TryInstantiateDbContext(Type contextType, DbContextOptions options)
+    {
         var genericOptionsType = typeof(DbContextOptions<>).MakeGenericType(contextType);
         foreach (var ctor in contextType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
         {
@@ -205,7 +248,9 @@ internal sealed class RuntimeEntityFrameworkMetadataProvider : IEntityFrameworkM
         return null;
     }
 
-    private static DbContextOptions? CreateDbContextOptions(Type contextType)
+    private static DbContextOptions? CreateDbContextOptions(
+        Type contextType,
+        Action<Type, DbContextOptionsBuilder> configureBuilder)
     {
         var builderType = typeof(DbContextOptionsBuilder<>).MakeGenericType(contextType);
         if (Activator.CreateInstance(builderType) is not DbContextOptionsBuilder builder)
@@ -213,17 +258,66 @@ internal sealed class RuntimeEntityFrameworkMetadataProvider : IEntityFrameworkM
             return null;
         }
 
-        TryConfigureInMemory(builderType, builder);
-        return builder.Options;
+        configureBuilder(builderType, builder);
+        return builder.IsConfigured ? builder.Options : null;
+    }
+
+    private static void TryConfigureSqlite(Type builderType, DbContextOptionsBuilder builder)
+    {
+        var sqliteExtensionsAssembly = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(assembly => assembly.GetName().Name == "Microsoft.EntityFrameworkCore.Sqlite")
+            ?? TryLoadAssembly("Microsoft.EntityFrameworkCore.Sqlite");
+
+        var sqliteExtensionsType = sqliteExtensionsAssembly
+            ?.GetType("Microsoft.EntityFrameworkCore.SqliteDbContextOptionsBuilderExtensions");
+
+        var method = sqliteExtensionsType?
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .FirstOrDefault(m =>
+            {
+                if (m.Name != "UseSqlite")
+                {
+                    return false;
+                }
+
+                var parameters = m.GetParameters();
+                return parameters.Length >= 2
+                    && parameters[0].ParameterType.IsAssignableFrom(builderType)
+                    && parameters[1].ParameterType == typeof(string);
+            });
+
+        if (method is null)
+        {
+            return;
+        }
+
+        var parameters = method.GetParameters();
+        var args = new object?[parameters.Length];
+        args[0] = builder;
+        args[1] = "Data Source=:memory:";
+        for (var i = 2; i < args.Length; i++)
+        {
+            args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
+        }
+
+        method.Invoke(null, args);
     }
 
     private static void TryConfigureInMemory(Type builderType, DbContextOptionsBuilder builder)
     {
+        if (builder.IsConfigured)
+        {
+            return;
+        }
+
         var inMemoryExtensions = AppDomain.CurrentDomain.GetAssemblies()
             .FirstOrDefault(assembly => assembly.GetName().Name == "Microsoft.EntityFrameworkCore.InMemory")
+            ?? TryLoadAssembly("Microsoft.EntityFrameworkCore.InMemory");
+
+        var inMemoryExtensionsType = inMemoryExtensions
             ?.GetType("Microsoft.EntityFrameworkCore.InMemoryDbContextOptionsExtensions");
 
-        var method = inMemoryExtensions?
+        var method = inMemoryExtensionsType?
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .FirstOrDefault(m =>
             {
@@ -255,6 +349,56 @@ internal sealed class RuntimeEntityFrameworkMetadataProvider : IEntityFrameworkM
         method.Invoke(null, args);
     }
 
+    private static Assembly? TryLoadAssembly(string assemblyName)
+    {
+        try
+        {
+            return Assembly.Load(assemblyName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static string GetVerboseTypeName(Type type)
+    {
+        if (type.IsGenericParameter)
+        {
+            return type.Name;
+        }
+
+        if (type.IsArray)
+        {
+            return GetVerboseTypeName(type.GetElementType()!) + "[" + new string(',', type.GetArrayRank() - 1) + "]";
+        }
+
+        if (!type.IsGenericType)
+        {
+            return type.FullName?.Replace('+', '.') ?? string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder();
+        var name = type.Name;
+        var index = name.IndexOf('`');
+        builder.AppendFormat("{0}.{1}", type.Namespace, index >= 0 ? name[..index] : name);
+        builder.Append('<');
+        var first = true;
+        foreach (var arg in type.GetGenericArguments())
+        {
+            if (!first)
+            {
+                builder.Append(", ");
+            }
+
+            builder.Append(GetVerboseTypeName(arg));
+            first = false;
+        }
+
+        builder.Append('>');
+        return builder.ToString();
+    }
+
     private sealed class EntityFrameworkClassMetadata
     {
         public string? SinglePrimaryKeyPropertyName { get; set; }
@@ -270,7 +414,7 @@ internal static class LoadedAssemblyTypeResolver
     public static Type? Resolve(string verboseFullyQualifiedName)
         => AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(GetLoadableTypes)
-            .FirstOrDefault(type => new ReflectionTypeViewModel(type).VerboseFullyQualifiedName == verboseFullyQualifiedName);
+            .FirstOrDefault(type => RuntimeEntityFrameworkMetadataProvider.GetVerboseTypeName(type) == verboseFullyQualifiedName);
 
     internal static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
     {

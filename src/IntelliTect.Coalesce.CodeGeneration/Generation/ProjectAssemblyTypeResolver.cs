@@ -19,7 +19,10 @@ internal sealed class ProjectAssemblyTypeResolver
     public ProjectAssemblyTypeResolver(MsBuildProjectContext projectContext)
     {
         _assemblyPath = projectContext.AssemblyFullPath;
-        _loadContext = new ProjectAssemblyLoadContext(projectContext.AssemblyFullPath, projectContext.TargetDirectory);
+        _loadContext = new ProjectAssemblyLoadContext(
+            projectContext.AssemblyFullPath,
+            projectContext.TargetDirectory,
+            projectContext.ResolvedReferences);
         _rootAssembly = new Lazy<Assembly>(() => _loadContext.LoadFromAssemblyPath(projectContext.AssemblyFullPath));
         _defaultContextAssembly = new Lazy<Assembly?>(TryLoadIntoDefaultContext);
     }
@@ -88,15 +91,27 @@ internal sealed class ProjectAssemblyTypeResolver
         private readonly AssemblyDependencyResolver _resolver;
         private readonly IReadOnlyDictionary<string, string> _referencePaths;
 
-        public ProjectAssemblyLoadContext(string assemblyPath, string targetDirectory)
+        public ProjectAssemblyLoadContext(string assemblyPath, string targetDirectory, IEnumerable<string> resolvedReferences)
             : base($"CoalesceProject:{Path.GetFileNameWithoutExtension(assemblyPath)}", isCollectible: false)
         {
             _resolver = new AssemblyDependencyResolver(assemblyPath);
             _referencePaths = Directory
                 .EnumerateFiles(targetDirectory, "*.dll", SearchOption.TopDirectoryOnly)
+                .Concat(resolvedReferences.Where(IsRuntimeAssemblyPath))
                 .Where(File.Exists)
                 .GroupBy(path => Path.GetFileNameWithoutExtension(path), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool IsRuntimeAssemblyPath(string path)
+        {
+            if (!path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var pathSegments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return !pathSegments.Contains("ref", StringComparer.OrdinalIgnoreCase);
         }
 
         protected override Assembly? Load(AssemblyName assemblyName)
