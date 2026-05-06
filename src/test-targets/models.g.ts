@@ -216,6 +216,13 @@ export interface Case extends Model<typeof metadata.Case> {
   attachment: string | null
   status: Statuses | null
   caseProducts: CaseProduct[] | null
+  
+  /** 
+    Calculated name of the person. eg., Mr. Michael Stokesbary.
+    A concatenation of Title, FirstName, and LastName.
+  */
+  assignedToName: string | null
+  reportedByCompanyName: string | null
 }
 export class Case {
   
@@ -593,6 +600,34 @@ export class EnumPk {
   /** Instantiate a new EnumPk, optionally basing it on the given data. */
   constructor(data?: Partial<EnumPk> | {[k: string]: any}) {
     Object.assign(this, EnumPk.map(data || {}));
+  }
+}
+
+
+export interface FluentConfiguredEntity extends Model<typeof metadata.FluentConfiguredEntity> {
+  tenantScopedKey: number | null
+  name: string | null
+  ownedValue: FluentOwnedValueObject | null
+  convertedValue: FluentConvertedValueObject | null
+  complexValue: FluentComplexValueObject | null
+}
+export class FluentConfiguredEntity {
+  
+  /** Mutates the input object and its descendants into a valid FluentConfiguredEntity implementation. */
+  static convert(data?: Partial<FluentConfiguredEntity>): FluentConfiguredEntity {
+    return convertToModel<FluentConfiguredEntity>(data || {}, metadata.FluentConfiguredEntity) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid FluentConfiguredEntity implementation. */
+  static map(data?: Partial<FluentConfiguredEntity>): FluentConfiguredEntity {
+    return mapToModel<FluentConfiguredEntity>(data || {}, metadata.FluentConfiguredEntity) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.FluentConfiguredEntity; }
+  
+  /** Instantiate a new FluentConfiguredEntity, optionally basing it on the given data. */
+  constructor(data?: Partial<FluentConfiguredEntity> | {[k: string]: any}) {
+    Object.assign(this, FluentConfiguredEntity.map(data || {}));
   }
 }
 
@@ -1063,6 +1098,58 @@ export class RequiredInternalUseModel {
 }
 
 
+export interface SelfOwnedTenant extends Model<typeof metadata.SelfOwnedTenant> {
+  id: number | null
+  tenantId: number | null
+  ownerTenant: SelfOwnedTenant | null
+}
+export class SelfOwnedTenant {
+  
+  /** Mutates the input object and its descendants into a valid SelfOwnedTenant implementation. */
+  static convert(data?: Partial<SelfOwnedTenant>): SelfOwnedTenant {
+    return convertToModel<SelfOwnedTenant>(data || {}, metadata.SelfOwnedTenant) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid SelfOwnedTenant implementation. */
+  static map(data?: Partial<SelfOwnedTenant>): SelfOwnedTenant {
+    return mapToModel<SelfOwnedTenant>(data || {}, metadata.SelfOwnedTenant) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.SelfOwnedTenant; }
+  
+  /** Instantiate a new SelfOwnedTenant, optionally basing it on the given data. */
+  constructor(data?: Partial<SelfOwnedTenant> | {[k: string]: any}) {
+    Object.assign(this, SelfOwnedTenant.map(data || {}));
+  }
+}
+
+
+export interface SelfOwnedTenantConsumer extends Model<typeof metadata.SelfOwnedTenantConsumer> {
+  id: number | null
+  tenantId: number | null
+  ownerTenant: SelfOwnedTenant | null
+}
+export class SelfOwnedTenantConsumer {
+  
+  /** Mutates the input object and its descendants into a valid SelfOwnedTenantConsumer implementation. */
+  static convert(data?: Partial<SelfOwnedTenantConsumer>): SelfOwnedTenantConsumer {
+    return convertToModel<SelfOwnedTenantConsumer>(data || {}, metadata.SelfOwnedTenantConsumer) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid SelfOwnedTenantConsumer implementation. */
+  static map(data?: Partial<SelfOwnedTenantConsumer>): SelfOwnedTenantConsumer {
+    return mapToModel<SelfOwnedTenantConsumer>(data || {}, metadata.SelfOwnedTenantConsumer) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.SelfOwnedTenantConsumer; }
+  
+  /** Instantiate a new SelfOwnedTenantConsumer, optionally basing it on the given data. */
+  constructor(data?: Partial<SelfOwnedTenantConsumer> | {[k: string]: any}) {
+    Object.assign(this, SelfOwnedTenantConsumer.map(data || {}));
+  }
+}
+
+
 export interface Sibling extends Model<typeof metadata.Sibling> {
   siblingId: number | null
   personId: number | null
@@ -1441,6 +1528,78 @@ export class ExternalTypeWithDtoProp {
   /** Instantiate a new ExternalTypeWithDtoProp, optionally basing it on the given data. */
   constructor(data?: Partial<ExternalTypeWithDtoProp> | {[k: string]: any}) {
     Object.assign(this, ExternalTypeWithDtoProp.map(data || {}));
+  }
+}
+
+
+export interface FluentComplexValueObject extends Model<typeof metadata.FluentComplexValueObject> {
+  value: string | null
+}
+export class FluentComplexValueObject {
+  
+  /** Mutates the input object and its descendants into a valid FluentComplexValueObject implementation. */
+  static convert(data?: Partial<FluentComplexValueObject>): FluentComplexValueObject {
+    return convertToModel<FluentComplexValueObject>(data || {}, metadata.FluentComplexValueObject) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid FluentComplexValueObject implementation. */
+  static map(data?: Partial<FluentComplexValueObject>): FluentComplexValueObject {
+    return mapToModel<FluentComplexValueObject>(data || {}, metadata.FluentComplexValueObject) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.FluentComplexValueObject; }
+  
+  /** Instantiate a new FluentComplexValueObject, optionally basing it on the given data. */
+  constructor(data?: Partial<FluentComplexValueObject> | {[k: string]: any}) {
+    Object.assign(this, FluentComplexValueObject.map(data || {}));
+  }
+}
+
+
+export interface FluentConvertedValueObject extends Model<typeof metadata.FluentConvertedValueObject> {
+  value: string | null
+}
+export class FluentConvertedValueObject {
+  
+  /** Mutates the input object and its descendants into a valid FluentConvertedValueObject implementation. */
+  static convert(data?: Partial<FluentConvertedValueObject>): FluentConvertedValueObject {
+    return convertToModel<FluentConvertedValueObject>(data || {}, metadata.FluentConvertedValueObject) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid FluentConvertedValueObject implementation. */
+  static map(data?: Partial<FluentConvertedValueObject>): FluentConvertedValueObject {
+    return mapToModel<FluentConvertedValueObject>(data || {}, metadata.FluentConvertedValueObject) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.FluentConvertedValueObject; }
+  
+  /** Instantiate a new FluentConvertedValueObject, optionally basing it on the given data. */
+  constructor(data?: Partial<FluentConvertedValueObject> | {[k: string]: any}) {
+    Object.assign(this, FluentConvertedValueObject.map(data || {}));
+  }
+}
+
+
+export interface FluentOwnedValueObject extends Model<typeof metadata.FluentOwnedValueObject> {
+  value: string | null
+}
+export class FluentOwnedValueObject {
+  
+  /** Mutates the input object and its descendants into a valid FluentOwnedValueObject implementation. */
+  static convert(data?: Partial<FluentOwnedValueObject>): FluentOwnedValueObject {
+    return convertToModel<FluentOwnedValueObject>(data || {}, metadata.FluentOwnedValueObject) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid FluentOwnedValueObject implementation. */
+  static map(data?: Partial<FluentOwnedValueObject>): FluentOwnedValueObject {
+    return mapToModel<FluentOwnedValueObject>(data || {}, metadata.FluentOwnedValueObject) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.FluentOwnedValueObject; }
+  
+  /** Instantiate a new FluentOwnedValueObject, optionally basing it on the given data. */
+  constructor(data?: Partial<FluentOwnedValueObject> | {[k: string]: any}) {
+    Object.assign(this, FluentOwnedValueObject.map(data || {}));
   }
 }
 
@@ -1917,6 +2076,10 @@ declare module "coalesce-vue/lib/model" {
     ExternalParentAsInputOnly: ExternalParentAsInputOnly
     ExternalParentAsOutputOnly: ExternalParentAsOutputOnly
     ExternalTypeWithDtoProp: ExternalTypeWithDtoProp
+    FluentComplexValueObject: FluentComplexValueObject
+    FluentConfiguredEntity: FluentConfiguredEntity
+    FluentConvertedValueObject: FluentConvertedValueObject
+    FluentOwnedValueObject: FluentOwnedValueObject
     InitRecordWithDefaultCtor: InitRecordWithDefaultCtor
     InputOutputOnlyExternalTypeWithRequiredNonscalarProp: InputOutputOnlyExternalTypeWithRequiredNonscalarProp
     Location: Location
@@ -1939,6 +2102,8 @@ declare module "coalesce-vue/lib/model" {
     RecursiveHierarchy: RecursiveHierarchy
     RequiredAndInitModel: RequiredAndInitModel
     RequiredInternalUseModel: RequiredInternalUseModel
+    SelfOwnedTenant: SelfOwnedTenant
+    SelfOwnedTenantConsumer: SelfOwnedTenantConsumer
     Sibling: Sibling
     SimpleModelTarget: SimpleModelTarget
     StandaloneReadonly: StandaloneReadonly

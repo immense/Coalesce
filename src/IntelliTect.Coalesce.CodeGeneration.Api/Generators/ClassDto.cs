@@ -331,10 +331,18 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
                 .ToList();
 
             var ownProps = orderedProps.Where(p => baseType?.PropertyByName(p.Name) is null);
+            var flattenedProps = Model.FlattenedResponseProperties
+                .Where(p => baseType?.PropertyByName(p.Name) is null
+                    && !(baseType?.FlattenedResponseProperties.Any(fp => fp.Name == p.Name) ?? false))
+                .ToList();
 
             foreach (PropertyViewModel prop in ownProps)
             {
                 b.Line($"public {ResponsePropertyType(prop)} {prop.Name} {{ get; set; }}");
+            }
+            foreach (var prop in flattenedProps)
+            {
+                b.Line($"public {prop.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {prop.Name} {{ get; set; }}");
             }
 
             b.DocComment("Map from the domain object to the properties of the current DTO instance.");
@@ -362,7 +370,8 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
                 b.Line();
 
                 WriteSetters(b, orderedProps
-                    .Select(ModelToDtoPropertySetter));
+                    .Select(ModelToDtoPropertySetter)
+                    .Concat(flattenedProps.Select(ModelToDtoFlattenedPropertySetter)));
             }
         }
     }
@@ -655,6 +664,9 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         var statement = GetPropertySetterConditional(property, property.SecurityInfo.Read, "obj");
         return (statement, setter);
     }
+
+    private (IEnumerable<string> conditionals, string setter) ModelToDtoFlattenedPropertySetter(FlattenedResponsePropertyViewModel property)
+        => (Enumerable.Empty<string>(), $"this.{property.Name} = {property.AccessExpression("obj")};");
 
     private string ResponsePropertyType(PropertyViewModel property)
     {
