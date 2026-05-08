@@ -24,5 +24,8 @@ public class Models : CompositeGenerator<ReflectionRepository>
                 .AppendOutputPath($"Generated/{model.ClientTypeName}Dto.g.cs");
             
         }
+
+        yield return Generator<GeneratedContracts>()
+            .WithModel(Model);
     }
 }
