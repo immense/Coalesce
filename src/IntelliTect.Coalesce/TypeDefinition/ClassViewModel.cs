@@ -179,12 +179,22 @@ public abstract class ClassViewModel : IAttributeProvider
             int count = 1;
             foreach (var prop in RawProperties(this))
             {
-                if (properties.Any(f => f.Name == prop.Name))
+                if (properties.FirstOrDefault(f => f.Name == prop.Name) is { } existing)
                 {
-                    // This is a duplicate. Keep the one that isn't virtual
-                    if (!prop.IsVirtual)
+                    // Prefer the property declared closest to the effective type so hidden/new members
+                    // on derived types win over the inherited member they're replacing.
+                    var existingDistance = InheritanceDistance(existing.Parent);
+                    var newDistance = InheritanceDistance(prop.Parent);
+                    if (
+                        newDistance < existingDistance ||
+                        (
+                            newDistance == existingDistance &&
+                            existing.IsVirtual &&
+                            !prop.IsVirtual
+                        )
+                    )
                     {
-                        properties.Remove(properties.First(f => f.Name == prop.Name));
+                        properties.Remove(existing);
                         prop.ClassFieldOrder = count;
                         properties.Add(prop);
                     }
@@ -201,6 +211,22 @@ public abstract class ClassViewModel : IAttributeProvider
             // If _Properties were mutable, we could potentially have two threads attempting to build the same collection at once.
             return _Properties = properties.AsReadOnly();
         }
+    }
+
+    int InheritanceDistance(ClassViewModel candidate)
+    {
+        var distance = 0;
+        for (var current = this; current is not null; current = current.Type.BaseType?.ClassViewModel)
+        {
+            if (current.Equals(candidate))
+            {
+                return distance;
+            }
+
+            distance++;
+        }
+
+        return int.MaxValue;
     }
 
     /// <summary>
@@ -220,6 +246,30 @@ public abstract class ClassViewModel : IAttributeProvider
     private IReadOnlyList<FlattenedResponsePropertyViewModel>? _flattenedResponseProperties;
     public IReadOnlyList<FlattenedResponsePropertyViewModel> FlattenedResponseProperties
         => _flattenedResponseProperties ??= FlattenedResponsePropertyViewModel.FromClass(this);
+
+    private IReadOnlyDictionary<string, bool>? _dtoContentViews;
+    public IReadOnlyDictionary<string, bool> DtoContentViews
+        => _dtoContentViews ??= GetAttributes<DtoContentViewAttribute>()
+            .Select(a => new
+            {
+                Name = a.GetValue(x => x.Name),
+                IncludeByDefault = a.GetValue(x => x.IncludeByDefault) ?? true,
+            })
+            .Where(a => !string.IsNullOrWhiteSpace(a.Name))
+            .GroupBy(a => a.Name!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Last().IncludeByDefault, StringComparer.Ordinal);
+
+    public bool ShouldIncludeUnspecifiedPropertiesForContentView(string? contentView)
+        => string.IsNullOrWhiteSpace(contentView)
+            || !DtoContentViews.TryGetValue(contentView, out var includeByDefault)
+            || includeByDefault;
+
+    public string? DefaultGetDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Get);
+    public string? DefaultListDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.List);
+    public string? DefaultCountDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Count);
+    public string? DefaultSaveDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Save);
+    public string? DefaultBulkSaveDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.BulkSave);
+    public string? DefaultDeleteDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Delete);
 
     /// <summary>
     /// List of method names that should not be exposed to the client.

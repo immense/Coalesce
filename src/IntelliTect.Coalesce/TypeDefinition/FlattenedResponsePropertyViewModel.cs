@@ -32,6 +32,28 @@ public sealed class FlattenedResponsePropertyViewModel
     public PropertyViewModel LeafProperty => PathProperties[^1];
     public TypeViewModel Type => LeafProperty.Type;
     public string IncludePath => string.Join(".", PathProperties.Take(PathProperties.Count - 1).Select(p => p.Name));
+    public IEnumerable<string> ContentViews => SplitContentViews(Attribute.ContentViews);
+    public IEnumerable<string> ExcludedContentViews => SplitContentViews(Attribute.ExcludedContentViews);
+
+    public bool IsMappedForContentView(string? contentView)
+    {
+        if (string.IsNullOrWhiteSpace(contentView))
+        {
+            return !ContentViews.Any();
+        }
+
+        if (ExcludedContentViews.Contains(contentView, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        if (ContentViews.Any())
+        {
+            return ContentViews.Contains(contentView, StringComparer.Ordinal);
+        }
+
+        return DeclaringClass.ShouldIncludeUnspecifiedPropertiesForContentView(contentView);
+    }
 
     public string AccessExpression(string rootExpression)
     {
@@ -64,6 +86,8 @@ public sealed class FlattenedResponsePropertyViewModel
     {
         var path = attribute.GetValue(a => a.Path);
         var name = attribute.GetValue(a => a.Name);
+        var contentViews = attribute.GetValue(a => a.ContentViews);
+        var excludedContentViews = attribute.GetValue(a => a.ExcludedContentViews);
 
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -107,6 +131,21 @@ public sealed class FlattenedResponsePropertyViewModel
             throw new InvalidOperationException($"[{nameof(DtoFlattenAttribute)}] path '{path}' on {model.FullyQualifiedName} must end on a scalar/enum value, not '{leaf.Type.FullyQualifiedName}'.");
         }
 
-        return new FlattenedResponsePropertyViewModel(model, new DtoFlattenAttribute(path) { Name = name }, pathProperties);
+        return new FlattenedResponsePropertyViewModel(
+            model,
+            new DtoFlattenAttribute(path)
+            {
+                Name = name,
+                ContentViews = contentViews,
+                ExcludedContentViews = excludedContentViews,
+            },
+            pathProperties);
     }
+
+    private static IEnumerable<string> SplitContentViews(string? contentViews)
+        => (contentViews ?? "")
+            .Trim()
+            .Split(',')
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s));
 }

@@ -54,6 +54,17 @@ public abstract class BaseApiController : Controller
     /// </summary>
     protected ClassViewModel? GeneratedForClassViewModel { get; set; }
 
+    protected static TParameters ApplyDefaultIncludes<TParameters>(TParameters parameters, string? defaultIncludes)
+        where TParameters : DataSourceParameters
+    {
+        if (string.IsNullOrWhiteSpace(parameters.Includes) && !string.IsNullOrWhiteSpace(defaultIncludes))
+        {
+            parameters.Includes = defaultIncludes;
+        }
+
+        return parameters;
+    }
+
     protected ActionResult File(IFile _methodResult)
     {
         string? _contentType = _methodResult.ContentType;

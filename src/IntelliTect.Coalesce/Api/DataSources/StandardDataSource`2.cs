@@ -53,7 +53,7 @@ public class StandardDataSource<T, TContext> : StandardDataSource<T>, IEntityFra
 
         if (!string.Equals(parameters.Includes, NoDefaultIncludesString, StringComparison.OrdinalIgnoreCase))
         {
-            query = query.IncludeChildren(this.Context.ReflectionRepository);
+            query = query.IncludeChildren(this.Context.ReflectionRepository, parameters.Includes);
         }
 
         return query;

@@ -259,6 +259,34 @@ export namespace Case {
 }
 
 
+export interface CaseAutoReadDto extends Model<typeof metadata.CaseAutoReadDto> {
+  caseId: number | null
+  title: string | null
+  assignedToName: string | null
+  reportedBy: PersonRecord | null
+  productNames: string[] | null
+}
+export class CaseAutoReadDto {
+  
+  /** Mutates the input object and its descendants into a valid CaseAutoReadDto implementation. */
+  static convert(data?: Partial<CaseAutoReadDto>): CaseAutoReadDto {
+    return convertToModel<CaseAutoReadDto>(data || {}, metadata.CaseAutoReadDto) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid CaseAutoReadDto implementation. */
+  static map(data?: Partial<CaseAutoReadDto>): CaseAutoReadDto {
+    return mapToModel<CaseAutoReadDto>(data || {}, metadata.CaseAutoReadDto) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.CaseAutoReadDto; }
+  
+  /** Instantiate a new CaseAutoReadDto, optionally basing it on the given data. */
+  constructor(data?: Partial<CaseAutoReadDto> | {[k: string]: any}) {
+    Object.assign(this, CaseAutoReadDto.map(data || {}));
+  }
+}
+
+
 export interface CaseDtoStandalone extends Model<typeof metadata.CaseDtoStandalone> {
   caseId: number | null
   title: string | null
@@ -280,6 +308,32 @@ export class CaseDtoStandalone {
   /** Instantiate a new CaseDtoStandalone, optionally basing it on the given data. */
   constructor(data?: Partial<CaseDtoStandalone> | {[k: string]: any}) {
     Object.assign(this, CaseDtoStandalone.map(data || {}));
+  }
+}
+
+
+export interface CaseDtoWithExternalObject extends Model<typeof metadata.CaseDtoWithExternalObject> {
+  caseKey: number | null
+  title: string | null
+  externalObject: ExternalObjectWithoutListText | null
+}
+export class CaseDtoWithExternalObject {
+  
+  /** Mutates the input object and its descendants into a valid CaseDtoWithExternalObject implementation. */
+  static convert(data?: Partial<CaseDtoWithExternalObject>): CaseDtoWithExternalObject {
+    return convertToModel<CaseDtoWithExternalObject>(data || {}, metadata.CaseDtoWithExternalObject) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid CaseDtoWithExternalObject implementation. */
+  static map(data?: Partial<CaseDtoWithExternalObject>): CaseDtoWithExternalObject {
+    return mapToModel<CaseDtoWithExternalObject>(data || {}, metadata.CaseDtoWithExternalObject) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.CaseDtoWithExternalObject; }
+  
+  /** Instantiate a new CaseDtoWithExternalObject, optionally basing it on the given data. */
+  constructor(data?: Partial<CaseDtoWithExternalObject> | {[k: string]: any}) {
+    Object.assign(this, CaseDtoWithExternalObject.map(data || {}));
   }
 }
 
@@ -473,6 +527,38 @@ export class ComplexModelDependent {
   /** Instantiate a new ComplexModelDependent, optionally basing it on the given data. */
   constructor(data?: Partial<ComplexModelDependent> | {[k: string]: any}) {
     Object.assign(this, ComplexModelDependent.map(data || {}));
+  }
+}
+
+
+export interface ContentViewEntity extends Model<typeof metadata.ContentViewEntity> {
+  contentViewEntityId: number | null
+  name: string | null
+  description: string | null
+  assignedToId: number | null
+  assignedTo: PersonSummary | null
+  reportedById: number | null
+  reportedBy: Person | null
+  neverMapped: string | null
+  reportedByCompanyName: string | null
+}
+export class ContentViewEntity {
+  
+  /** Mutates the input object and its descendants into a valid ContentViewEntity implementation. */
+  static convert(data?: Partial<ContentViewEntity>): ContentViewEntity {
+    return convertToModel<ContentViewEntity>(data || {}, metadata.ContentViewEntity) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid ContentViewEntity implementation. */
+  static map(data?: Partial<ContentViewEntity>): ContentViewEntity {
+    return mapToModel<ContentViewEntity>(data || {}, metadata.ContentViewEntity) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.ContentViewEntity; }
+  
+  /** Instantiate a new ContentViewEntity, optionally basing it on the given data. */
+  constructor(data?: Partial<ContentViewEntity> | {[k: string]: any}) {
+    Object.assign(this, ContentViewEntity.map(data || {}));
   }
 }
 
@@ -1416,6 +1502,31 @@ export class ExternalChildAsOutputOnly {
 }
 
 
+export interface ExternalObjectWithoutListText extends Model<typeof metadata.ExternalObjectWithoutListText> {
+  value: string | null
+  child: NestedExternalObjectWithoutListText | null
+}
+export class ExternalObjectWithoutListText {
+  
+  /** Mutates the input object and its descendants into a valid ExternalObjectWithoutListText implementation. */
+  static convert(data?: Partial<ExternalObjectWithoutListText>): ExternalObjectWithoutListText {
+    return convertToModel<ExternalObjectWithoutListText>(data || {}, metadata.ExternalObjectWithoutListText) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid ExternalObjectWithoutListText implementation. */
+  static map(data?: Partial<ExternalObjectWithoutListText>): ExternalObjectWithoutListText {
+    return mapToModel<ExternalObjectWithoutListText>(data || {}, metadata.ExternalObjectWithoutListText) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.ExternalObjectWithoutListText; }
+  
+  /** Instantiate a new ExternalObjectWithoutListText, optionally basing it on the given data. */
+  constructor(data?: Partial<ExternalObjectWithoutListText> | {[k: string]: any}) {
+    Object.assign(this, ExternalObjectWithoutListText.map(data || {}));
+  }
+}
+
+
 export interface ExternalParent extends Model<typeof metadata.ExternalParent> {
   valueArray: number[] | null
   valueNullableArray: number[] | null
@@ -1681,6 +1792,30 @@ export class Location {
 }
 
 
+export interface NestedExternalObjectWithoutListText extends Model<typeof metadata.NestedExternalObjectWithoutListText> {
+  value: string | null
+}
+export class NestedExternalObjectWithoutListText {
+  
+  /** Mutates the input object and its descendants into a valid NestedExternalObjectWithoutListText implementation. */
+  static convert(data?: Partial<NestedExternalObjectWithoutListText>): NestedExternalObjectWithoutListText {
+    return convertToModel<NestedExternalObjectWithoutListText>(data || {}, metadata.NestedExternalObjectWithoutListText) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid NestedExternalObjectWithoutListText implementation. */
+  static map(data?: Partial<NestedExternalObjectWithoutListText>): NestedExternalObjectWithoutListText {
+    return mapToModel<NestedExternalObjectWithoutListText>(data || {}, metadata.NestedExternalObjectWithoutListText) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.NestedExternalObjectWithoutListText; }
+  
+  /** Instantiate a new NestedExternalObjectWithoutListText, optionally basing it on the given data. */
+  constructor(data?: Partial<NestedExternalObjectWithoutListText> | {[k: string]: any}) {
+    Object.assign(this, NestedExternalObjectWithoutListText.map(data || {}));
+  }
+}
+
+
 export interface OutputOnlyExternalTypeWithoutDefaultCtor extends Model<typeof metadata.OutputOnlyExternalTypeWithoutDefaultCtor> {
   bar: string | null
   baz: string | null
@@ -1780,6 +1915,31 @@ export class PersonCriteria {
   /** Instantiate a new PersonCriteria, optionally basing it on the given data. */
   constructor(data?: Partial<PersonCriteria> | {[k: string]: any}) {
     Object.assign(this, PersonCriteria.map(data || {}));
+  }
+}
+
+
+export interface PersonRecord extends Model<typeof metadata.PersonRecord> {
+  personId: number | null
+  name: string | null
+}
+export class PersonRecord {
+  
+  /** Mutates the input object and its descendants into a valid PersonRecord implementation. */
+  static convert(data?: Partial<PersonRecord>): PersonRecord {
+    return convertToModel<PersonRecord>(data || {}, metadata.PersonRecord) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid PersonRecord implementation. */
+  static map(data?: Partial<PersonRecord>): PersonRecord {
+    return mapToModel<PersonRecord>(data || {}, metadata.PersonRecord) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.PersonRecord; }
+  
+  /** Instantiate a new PersonRecord, optionally basing it on the given data. */
+  constructor(data?: Partial<PersonRecord> | {[k: string]: any}) {
+    Object.assign(this, PersonRecord.map(data || {}));
   }
 }
 
@@ -2059,11 +2219,14 @@ declare module "coalesce-vue/lib/model" {
     AbstractModelPerson: AbstractModelPerson
     Advisor: Advisor
     Case: Case
+    CaseAutoReadDto: CaseAutoReadDto
     CaseDtoStandalone: CaseDtoStandalone
+    CaseDtoWithExternalObject: CaseDtoWithExternalObject
     CaseProduct: CaseProduct
     Company: Company
     ComplexModel: ComplexModel
     ComplexModelDependent: ComplexModelDependent
+    ContentViewEntity: ContentViewEntity
     Course: Course
     DateOnlyPk: DateOnlyPk
     DateTimeOffsetPk: DateTimeOffsetPk
@@ -2072,6 +2235,7 @@ declare module "coalesce-vue/lib/model" {
     ExternalChild: ExternalChild
     ExternalChildAsInputOnly: ExternalChildAsInputOnly
     ExternalChildAsOutputOnly: ExternalChildAsOutputOnly
+    ExternalObjectWithoutListText: ExternalObjectWithoutListText
     ExternalParent: ExternalParent
     ExternalParentAsInputOnly: ExternalParentAsInputOnly
     ExternalParentAsOutputOnly: ExternalParentAsOutputOnly
@@ -2084,6 +2248,7 @@ declare module "coalesce-vue/lib/model" {
     InputOutputOnlyExternalTypeWithRequiredNonscalarProp: InputOutputOnlyExternalTypeWithRequiredNonscalarProp
     Location: Location
     MultipleParents: MultipleParents
+    NestedExternalObjectWithoutListText: NestedExternalObjectWithoutListText
     OneToOneManyChildren: OneToOneManyChildren
     OneToOneParent: OneToOneParent
     OneToOneSeparateKeyChild: OneToOneSeparateKeyChild
@@ -2096,6 +2261,7 @@ declare module "coalesce-vue/lib/model" {
     Parent2: Parent2
     Person: Person
     PersonCriteria: PersonCriteria
+    PersonRecord: PersonRecord
     PositionalRecord: PositionalRecord
     Product: Product
     ReadOnlyEntityUsedAsMethodInput: ReadOnlyEntityUsedAsMethodInput

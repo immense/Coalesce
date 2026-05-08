@@ -912,6 +912,26 @@ public abstract class PropertyViewModel : ValueViewModel
         .Select(s => s.Trim())
         .Where(s => !string.IsNullOrEmpty(s));
 
+    public bool IsMappedForContentView(string? contentView)
+    {
+        if (string.IsNullOrWhiteSpace(contentView))
+        {
+            return !DtoIncludes.Any();
+        }
+
+        if (DtoExcludes.Contains(contentView, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        if (DtoIncludes.Any())
+        {
+            return DtoIncludes.Contains(contentView, StringComparer.Ordinal);
+        }
+
+        return EffectiveParent.ShouldIncludeUnspecifiedPropertiesForContentView(contentView);
+    }
+
     /// <summary>
     /// Returns the role the property plays in a relational model.
     /// </summary>
