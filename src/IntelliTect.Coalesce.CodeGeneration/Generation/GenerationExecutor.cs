@@ -99,15 +99,14 @@ public class GenerationExecutor
                     new ProjectAssemblyTypeResolver(dataProject.MsBuildProjectContext).Resolve);
         }
 
-        var locator = genContext.DataProject.TypeLocator as RoslynTypeLocator;
         var npmPackageVersionTask = ServiceProvider.GetRequiredService<NpmDependencyAnalayzer>().GetNpmPackageVersion("coalesce-vue");
 
         Logger.LogInformation("Gathering Types");
-        var types = locator.GetAllTypes();
+        var types = ProjectTypeDiscovery.GetAllTypes(genContext);
 
         Logger.LogInformation("Checking Diagnostics");
         bool die = false;
-        foreach (var diag in locator.GetDiagnostics())
+        foreach (var diag in ProjectTypeDiscovery.GetDiagnostics(genContext))
         {
             Logger.LogError(diag);
             die = true;
@@ -127,7 +126,12 @@ public class GenerationExecutor
         }
 
         rr.DiscoverCoalescedTypes(
-            types.Select(t => new SymbolTypeViewModel(rr, t))
+            types
+                .Where(t => t.GetAttributes().Any(a =>
+                    a.AttributeClass?.ToDisplayString() is
+                        "IntelliTect.Coalesce.CoalesceAttribute" or
+                        "IntelliTect.Coalesce.SimpleModelAttribute"))
+                .Select(t => new SymbolTypeViewModel(rr, t))
         );
 
 

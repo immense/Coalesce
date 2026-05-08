@@ -79,6 +79,7 @@ public class RoslynTypeLocator : TypeLocator
     }
 
     private List<INamedTypeSymbol> _allTypes;
+    private List<INamedTypeSymbol> _allTypesWithReferences;
 
     public List<INamedTypeSymbol> GetAllTypes()
     {
@@ -90,6 +91,25 @@ public class RoslynTypeLocator : TypeLocator
         compilation.Assembly.GlobalNamespace.Accept(visitor);
         return _allTypes = visitor.Discovered;
     }
+
+    public List<INamedTypeSymbol> GetAllTypes(bool includeReferencedAssemblies)
+    {
+        if (!includeReferencedAssemblies)
+        {
+            return GetAllTypes();
+        }
+
+        if (_allTypesWithReferences != null) return _allTypesWithReferences;
+
+        var compilation = GetProjectCompilation();
+
+        var visitor = new SymbolDiscoveryVisitor();
+        compilation.GlobalNamespace.Accept(visitor);
+        return _allTypesWithReferences = visitor.Discovered;
+    }
+
+    public INamedTypeSymbol FindTypeByMetadataName(string typeName)
+        => GetProjectCompilation().GetTypeByMetadataName(typeName);
 
     private class SymbolDiscoveryVisitor : SymbolVisitor
     {
