@@ -10,15 +10,21 @@ namespace IntelliTect.Coalesce.TypeDefinition;
 public sealed class SummaryPropertyViewModel
 {
     private readonly IReadOnlyList<PropertyViewModel> _pathProperties;
+    private readonly IReadOnlyList<string> _contentViews;
+    private readonly IReadOnlyList<string> _excludedContentViews;
 
     private SummaryPropertyViewModel(
         ClassViewModel parent,
         IReadOnlyList<PropertyViewModel> pathProperties,
-        string? explicitName
+        string? explicitName,
+        IReadOnlyList<string>? contentViews = null,
+        IReadOnlyList<string>? excludedContentViews = null
     )
     {
         Parent = parent;
         _pathProperties = pathProperties;
+        _contentViews = contentViews ?? [];
+        _excludedContentViews = excludedContentViews ?? [];
         LeafProperty = pathProperties[^1];
         Type = LeafProperty.Type;
         Name = explicitName ?? string.Concat(pathProperties.Select(p => p.Name));
@@ -41,6 +47,30 @@ public sealed class SummaryPropertyViewModel
     public PropertyViewModel LeafProperty { get; }
 
     public string? IncludePath { get; }
+
+    public IEnumerable<string> ContentViews => _contentViews;
+
+    public IEnumerable<string> ExcludedContentViews => _excludedContentViews;
+
+    public bool IsMappedForContentView(string? contentView)
+    {
+        if (string.IsNullOrWhiteSpace(contentView))
+        {
+            return !_contentViews.Any();
+        }
+
+        if (_excludedContentViews.Contains(contentView, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        if (_contentViews.Any())
+        {
+            return _contentViews.Contains(contentView, StringComparer.Ordinal);
+        }
+
+        return Parent.ShouldIncludeUnspecifiedPropertiesForContentView(contentView);
+    }
 
     public string AccessExpression(string rootExpression)
     {
@@ -81,6 +111,8 @@ public sealed class SummaryPropertyViewModel
     {
         var path = attribute.GetValue(a => a.Path);
         var name = attribute.GetValue(a => a.Name);
+        var contentViews = SplitContentViews(attribute.GetValue(a => a.ContentViews));
+        var excludedContentViews = SplitContentViews(attribute.GetValue(a => a.ExcludedContentViews));
 
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -118,7 +150,7 @@ public sealed class SummaryPropertyViewModel
         }
 
         EnsureLeafSupported(model, pathProperties[^1].Type, path);
-        return new SummaryPropertyViewModel(model, pathProperties, name);
+        return new SummaryPropertyViewModel(model, pathProperties, name, contentViews, excludedContentViews);
     }
 
     private static void EnsureLeafSupported(ClassViewModel model, TypeViewModel type, string path)
@@ -128,4 +160,12 @@ public sealed class SummaryPropertyViewModel
             throw new InvalidOperationException($"[{nameof(DtoSummaryAttribute)}] path '{path}' on {model.FullyQualifiedName} must end on a scalar/enum value, not '{type.FullyQualifiedName}'.");
         }
     }
+
+    private static IReadOnlyList<string> SplitContentViews(string? contentViews)
+        => (contentViews ?? "")
+            .Trim()
+            .Split(',')
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s))
+            .ToArray();
 }

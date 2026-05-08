@@ -49,6 +49,12 @@ public class ModelApiController : ApiController
         var primaryKeyParameter = $"{Model.PrimaryKey.Type.FullyQualifiedName} id";
         var dataSourceParameter = $"IDataSource<{Model.BaseViewModel.FullyQualifiedName}> dataSource";
         var behaviorsParameter = $"IBehaviors<{Model.BaseViewModel.FullyQualifiedName}> behaviors";
+        string defaultGetIncludes = DefaultIncludesLiteral(Model.DefaultGetDtoIncludes);
+        string defaultListIncludes = DefaultIncludesLiteral(Model.DefaultListDtoIncludes);
+        string defaultCountIncludes = DefaultIncludesLiteral(Model.DefaultCountDtoIncludes);
+        string defaultSaveIncludes = DefaultIncludesLiteral(Model.DefaultSaveDtoIncludes);
+        string defaultBulkSaveIncludes = DefaultIncludesLiteral(Model.DefaultBulkSaveDtoIncludes);
+        string defaultDeleteIncludes = DefaultIncludesLiteral(Model.DefaultDeleteDtoIncludes);
 #pragma warning disable CS0618 // Type or member is obsolete
         var accessModifier = Model.ApiActionAccessModifier;
 #pragma warning restore CS0618 // Type or member is obsolete
@@ -78,7 +84,7 @@ public class ModelApiController : ApiController
             b.Indented($"{primaryKeyParameter},");
             b.Indented($"[FromQuery] DataSourceParameters parameters,");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> GetImplementation(id, parameters, dataSource);");
+            b.Indented($"=> GetImplementation(id, ApplyDefaultIncludes(parameters, {defaultGetIncludes}), dataSource);");
 
             // ENDPOINT: /list
             b.Line();
@@ -87,7 +93,7 @@ public class ModelApiController : ApiController
             b.Line($"{accessModifier} virtual Task<ListResult<{Model.ResponseDtoTypeName}>> List(");
             b.Indented($"[FromQuery] ListParameters parameters,");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> ListImplementation(parameters, dataSource);");
+            b.Indented($"=> ListImplementation(ApplyDefaultIncludes(parameters, {defaultListIncludes}), dataSource);");
 
             // ENDPOINT: /count
             b.Line();
@@ -96,7 +102,7 @@ public class ModelApiController : ApiController
             b.Line($"{accessModifier} virtual Task<ItemResult<int>> Count(");
             b.Indented($"[FromQuery] FilterParameters parameters,");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> CountImplementation(parameters, dataSource);");
+            b.Indented($"=> CountImplementation(ApplyDefaultIncludes(parameters, {defaultCountIncludes}), dataSource);");
         }
 
         if (securityInfo.Save.IsAllowed())
@@ -111,7 +117,7 @@ public class ModelApiController : ApiController
             b.Indented($"[FromQuery] DataSourceParameters parameters,");
             b.Indented($"{dataSourceParameter},");
             b.Indented($"{behaviorsParameter})");
-            b.Indented($"=> SaveImplementation(dto, parameters, dataSource, behaviors);");
+            b.Indented($"=> SaveImplementation(dto, ApplyDefaultIncludes(parameters, {defaultSaveIncludes}), dataSource, behaviors);");
 
             b.Line();
             b.Line("""[HttpPost("save")]""");
@@ -122,16 +128,14 @@ public class ModelApiController : ApiController
             b.Indented($"[FromQuery] DataSourceParameters parameters,");
             b.Indented($"{dataSourceParameter},");
             b.Indented($"{behaviorsParameter})");
-            b.Indented($"=> SaveImplementation(dto, parameters, dataSource, behaviors);");
+            b.Indented($"=> SaveImplementation(dto, ApplyDefaultIncludes(parameters, {defaultSaveIncludes}), dataSource, behaviors);");
         }
 
-        if (Model.DbContext != null && securityInfo.IsReadAllowed())
+        if (Model.DbContext != null && securityInfo.IsReadAllowed() && (securityInfo.Save.IsAllowed() || securityInfo.IsDeleteAllowed()))
         {
-            // Counterintuitively, bulk saves are governed by read permissions. This is for a few reasons:
-            // - BulkSaveImplementation checks the save/delete permissions for each entity being acted upon at runtime.
-            // - At the end of a bulk save, a GetImplementation is performed for this controller's type.
-            // - A particular usage of a bulk save might never be saving the root entity;
-            //   it may be the case that the root entity is immutable and only its children are being mutated.
+            // Bulk saves are only emitted for readable, mutable roots.
+            // BulkSaveImplementation still checks save/delete permissions for each entity at runtime,
+            // but omitting the endpoint entirely for immutable roots keeps read-only slices read-only.
 
             // ENDPOINT: /bulkSave
             b.Line();
@@ -143,7 +147,7 @@ public class ModelApiController : ApiController
             b.Indented($"{dataSourceParameter},");
             b.Indented($"[FromServices] IDataSourceFactory dataSourceFactory,");
             b.Indented($"[FromServices] IBehaviorsFactory behaviorsFactory)");
-            b.Indented($"=> BulkSaveImplementation(dto, parameters, dataSource, dataSourceFactory, behaviorsFactory);");
+            b.Indented($"=> BulkSaveImplementation(dto, ApplyDefaultIncludes(parameters, {defaultBulkSaveIncludes}), dataSource, dataSourceFactory, behaviorsFactory);");
         }
 
         if (securityInfo.IsDeleteAllowed())
@@ -156,7 +160,7 @@ public class ModelApiController : ApiController
             b.Indented($"{primaryKeyParameter},");
             b.Indented($"{behaviorsParameter},");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> DeleteImplementation(id, new DataSourceParameters(), dataSource, behaviors);");
+            b.Indented($"=> DeleteImplementation(id, ApplyDefaultIncludes(new DataSourceParameters(), {defaultDeleteIncludes}), dataSource, behaviors);");
         }
 
         if (Model.ClientMethods.Any())
@@ -286,4 +290,9 @@ public class ModelApiController : ApiController
         }
         b.Line();
     }
+
+    private static string DefaultIncludesLiteral(string includes)
+        => string.IsNullOrWhiteSpace(includes)
+            ? "null"
+            : includes.QuotedStringLiteralForCSharp();
 }

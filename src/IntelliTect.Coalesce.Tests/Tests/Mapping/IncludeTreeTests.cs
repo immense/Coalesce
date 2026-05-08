@@ -101,7 +101,7 @@ public class IncludeTreeTests
     public async Task IncludeTree_IncludeChildren_IncludesReferenceSummaryPaths()
     {
         var tree = db.Cases
-            .IncludeChildren(ReflectionRepositoryFactory.Reflection)
+            .IncludeChildren(ReflectionRepositoryFactory.Reflection, "detail")
             .GetIncludeTree();
 
         await Assert.That(tree[nameof(Case.AssignedTo)]).IsNotNull();

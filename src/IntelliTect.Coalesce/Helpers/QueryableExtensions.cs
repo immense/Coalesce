@@ -17,14 +17,14 @@ public static class QueryableExtensions
     /// <para>Includes immediate children, as well as the other side of many-to-many relationships.</para>
     /// <para>Does not include navigations or classes that have <see cref="ReadAttribute.NoAutoInclude"/> or <see cref="CoalesceConfigurationAttribute.NoAutoInclude"/> set.</para>
     /// </summary>
-    public static IQueryable<T> IncludeChildren<T>(this IQueryable<T> query, ReflectionRepository? reflectionRepository = null) where T : class
+    public static IQueryable<T> IncludeChildren<T>(this IQueryable<T> query, ReflectionRepository? reflectionRepository = null, string? includes = null) where T : class
     {
         var model = (reflectionRepository ?? ReflectionRepository.Global).GetClassViewModel<T>()
             ?? throw new ArgumentException("Queried type is not a class");
 
         var includePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var prop in model.ClientProperties.Where(f => f.CanAutoInclude))
+        foreach (var prop in model.ClientProperties.Where(f => f.CanAutoInclude && f.IsMappedForContentView(includes)))
         {
             if (prop.IsManyToManyCollection && prop.ManyToManyFarNavigationProperty.CanAutoInclude)
             {
@@ -36,12 +36,12 @@ public static class QueryableExtensions
             }
         }
 
-        foreach (var flattened in model.FlattenedResponseProperties)
+        foreach (var flattened in model.FlattenedResponseProperties.Where(f => f.IsMappedForContentView(includes)))
         {
             includePaths.Add(flattened.IncludePath);
         }
 
-        AddReferenceSummaryIncludePaths(model, includePaths);
+        AddReferenceSummaryIncludePaths(model, includePaths, includes);
 
         foreach (var includePath in includePaths)
         {
@@ -51,14 +51,17 @@ public static class QueryableExtensions
         return query;
     }
 
-    private static void AddReferenceSummaryIncludePaths(ClassViewModel model, HashSet<string> includePaths)
+    private static void AddReferenceSummaryIncludePaths(ClassViewModel model, HashSet<string> includePaths, string? includes)
     {
-        foreach (var prop in model.ClientProperties.Where(p => p.UsesDtoReferenceSummary && p.Object is not null))
+        foreach (var prop in model.ClientProperties.Where(p =>
+            p.UsesDtoReferenceSummary
+            && p.Object is not null
+            && p.IsMappedForContentView(includes)))
         {
             var target = prop.Object!;
             includePaths.Add(prop.Name);
 
-            foreach (var summaryProp in target.SummaryProperties)
+            foreach (var summaryProp in target.SummaryProperties.Where(p => p.IsMappedForContentView(includes)))
             {
                 if (!string.IsNullOrWhiteSpace(summaryProp.IncludePath))
                 {

@@ -396,11 +396,10 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             using (b.Block($"public void MapFrom({Model.FullyQualifiedName} obj, IMappingContext context, IncludeTree tree = null)"))
             {
                 b.Line("if (obj is null) return;");
+                b.Line("var includes = context.Includes;");
+                b.Line();
                 b.Line($"this.{primaryKey.Name} = obj.{primaryKey.Name};");
-                foreach (var prop in Model.SummaryProperties)
-                {
-                    b.Line($"this.{prop.Name} = {prop.AccessExpression("obj")};");
-                }
+                WriteSetters(b, Model.SummaryProperties.Select(ModelToSummaryDtoPropertySetter));
             }
         }
     }
@@ -473,11 +472,15 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
 
         var includes = string.Join(" || ", property.DtoIncludes.Select(IncludesCheck));
         var excludes = string.Join(" || ", property.DtoExcludes.Select(IncludesCheck));
+        var explicitViewExcludes = string.Join(" || ", property.EffectiveParent.DtoContentViews
+            .Where(v => !v.Value && !property.DtoIncludes.Contains(v.Key, StringComparer.Ordinal))
+            .Select(v => IncludesCheck(v.Key)));
 
         var statement = new List<string>();
         if (!string.IsNullOrEmpty(roles)) statement.Add($"({roles})");
         if (!string.IsNullOrEmpty(includes)) statement.Add($"({includes})");
         if (!string.IsNullOrEmpty(excludes)) statement.Add($"!({excludes})");
+        if (!string.IsNullOrEmpty(explicitViewExcludes)) statement.Add($"!({explicitViewExcludes})");
 
         foreach (var restriction in property.SecurityInfo.Restrictions)
         {
@@ -666,7 +669,44 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
     }
 
     private (IEnumerable<string> conditionals, string setter) ModelToDtoFlattenedPropertySetter(FlattenedResponsePropertyViewModel property)
-        => (Enumerable.Empty<string>(), $"this.{property.Name} = {property.AccessExpression("obj")};");
+        => (
+            GetContentViewConditionals(property.DeclaringClass, property.ContentViews, property.ExcludedContentViews),
+            $"this.{property.Name} = {property.AccessExpression("obj")};");
+
+    private (IEnumerable<string> conditionals, string setter) ModelToSummaryDtoPropertySetter(SummaryPropertyViewModel property)
+        => (
+            GetContentViewConditionals(property.Parent, property.ContentViews, property.ExcludedContentViews),
+            $"this.{property.Name} = {property.AccessExpression("obj")};");
+
+    private static IEnumerable<string> GetContentViewConditionals(
+        ClassViewModel declaringClass,
+        IEnumerable<string> includes,
+        IEnumerable<string> excludes)
+    {
+        string IncludesCheck(string include) => $"includes == \"{include.EscapeStringLiteralForCSharp()}\"";
+
+        var includeList = includes.ToList();
+        var excludeList = excludes.ToList();
+        var explicitViewExcludes = declaringClass.DtoContentViews
+            .Where(v => !v.Value && !includeList.Contains(v.Key, StringComparer.Ordinal))
+            .Select(v => IncludesCheck(v.Key))
+            .ToList();
+
+        if (includeList.Count > 0)
+        {
+            yield return $"({string.Join(" || ", includeList.Select(IncludesCheck))})";
+        }
+
+        if (excludeList.Count > 0)
+        {
+            yield return $"!({string.Join(" || ", excludeList.Select(IncludesCheck))})";
+        }
+
+        if (explicitViewExcludes.Count > 0)
+        {
+            yield return $"!({string.Join(" || ", explicitViewExcludes)})";
+        }
+    }
 
     private string ResponsePropertyType(PropertyViewModel property)
     {

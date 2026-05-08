@@ -943,6 +943,59 @@ export const Case = domain.types.Case = {
     },
   },
 }
+export const CaseAutoReadDto = domain.types.CaseAutoReadDto = {
+  name: "CaseAutoReadDto" as const,
+  displayName: "Case Auto Read Dto",
+  get displayProp() { return this.props.caseId }, 
+  type: "model",
+  controllerRoute: "CaseAutoReadDto",
+  get keyProp() { return this.props.caseId }, 
+  behaviorFlags: 0 as BehaviorFlags,
+  props: {
+    caseId: {
+      name: "caseId",
+      displayName: "Case Id",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    title: {
+      name: "title",
+      displayName: "Title",
+      type: "string",
+      role: "value",
+    },
+    assignedToName: {
+      name: "assignedToName",
+      displayName: "Assigned To Name",
+      type: "string",
+      role: "value",
+    },
+    reportedBy: {
+      name: "reportedBy",
+      displayName: "Reported By",
+      type: "object",
+      get typeDef() { return (domain.types.PersonRecord as ObjectType & { name: "PersonRecord" }) },
+      role: "value",
+    },
+    productNames: {
+      name: "productNames",
+      displayName: "Product Names",
+      type: "collection",
+      itemType: {
+        name: "$collectionItem",
+        displayName: "",
+        role: "value",
+        type: "string",
+      },
+      role: "value",
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
 export const CaseDtoStandalone = domain.types.CaseDtoStandalone = {
   name: "CaseDtoStandalone" as const,
   displayName: "Case Dto Standalone",
@@ -963,6 +1016,41 @@ export const CaseDtoStandalone = domain.types.CaseDtoStandalone = {
       name: "title",
       displayName: "Title",
       type: "string",
+      role: "value",
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
+export const CaseDtoWithExternalObject = domain.types.CaseDtoWithExternalObject = {
+  name: "CaseDtoWithExternalObject" as const,
+  displayName: "Case Dto With External Object",
+  get displayProp() { return this.props.caseKey }, 
+  type: "model",
+  controllerRoute: "CaseDtoWithExternalObject",
+  get keyProp() { return this.props.caseKey }, 
+  behaviorFlags: 7 as BehaviorFlags,
+  props: {
+    caseKey: {
+      name: "caseKey",
+      displayName: "Case Key",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    title: {
+      name: "title",
+      displayName: "Title",
+      type: "string",
+      role: "value",
+    },
+    externalObject: {
+      name: "externalObject",
+      displayName: "External Object",
+      type: "object",
+      get typeDef() { return (domain.types.ExternalObjectWithoutListText as ObjectType & { name: "ExternalObjectWithoutListText" }) },
       role: "value",
     },
   },
@@ -3197,6 +3285,90 @@ export const ComplexModelDependent = domain.types.ComplexModelDependent = {
   dataSources: {
   },
 }
+export const ContentViewEntity = domain.types.ContentViewEntity = {
+  name: "ContentViewEntity" as const,
+  displayName: "Content View Entity",
+  get displayProp() { return this.props.name }, 
+  type: "model",
+  controllerRoute: "ContentViewEntity",
+  get keyProp() { return this.props.contentViewEntityId }, 
+  behaviorFlags: 7 as BehaviorFlags,
+  props: {
+    contentViewEntityId: {
+      name: "contentViewEntityId",
+      displayName: "Content View Entity Id",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    name: {
+      name: "name",
+      displayName: "Name",
+      type: "string",
+      role: "value",
+    },
+    description: {
+      name: "description",
+      displayName: "Description",
+      type: "string",
+      role: "value",
+    },
+    assignedToId: {
+      name: "assignedToId",
+      displayName: "Assigned To Id",
+      type: "number",
+      role: "foreignKey",
+      get principalKey() { return (domain.types.Person as ModelType & { name: "Person" }).props.personId as PrimaryKeyProperty },
+      get principalType() { return (domain.types.Person as ModelType & { name: "Person" }) },
+      get navigationProp() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }).props.assignedTo as ModelReferenceNavigationProperty },
+      hidden: 3 as HiddenAreas,
+    },
+    assignedTo: {
+      name: "assignedTo",
+      displayName: "Assigned To",
+      type: "object",
+      get typeDef() { return (domain.types.PersonSummary as ObjectType & { name: "PersonSummary" }) },
+      role: "value",
+      dontSerialize: true,
+    },
+    reportedById: {
+      name: "reportedById",
+      displayName: "Reported By Id",
+      type: "number",
+      role: "foreignKey",
+      get principalKey() { return (domain.types.Person as ModelType & { name: "Person" }).props.personId as PrimaryKeyProperty },
+      get principalType() { return (domain.types.Person as ModelType & { name: "Person" }) },
+      get navigationProp() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }).props.reportedBy as ModelReferenceNavigationProperty },
+      hidden: 3 as HiddenAreas,
+    },
+    reportedBy: {
+      name: "reportedBy",
+      displayName: "Reported By",
+      type: "model",
+      get typeDef() { return (domain.types.Person as ModelType & { name: "Person" }) },
+      role: "referenceNavigation",
+      get foreignKey() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }).props.reportedById as ForeignKeyProperty },
+      get principalKey() { return (domain.types.Person as ModelType & { name: "Person" }).props.personId as PrimaryKeyProperty },
+      dontSerialize: true,
+    },
+    neverMapped: {
+      name: "neverMapped",
+      displayName: "Never Mapped",
+      type: "string",
+      role: "value",
+    },
+    reportedByCompanyName: {
+      name: "reportedByCompanyName",
+      displayName: "Reported By Company Name",
+      type: "string",
+      role: "value",
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
 export const Course = domain.types.Course = {
   name: "Course" as const,
   displayName: "Course",
@@ -5309,6 +5481,26 @@ export const ExternalChildAsOutputOnly = domain.types.ExternalChildAsOutputOnly 
     },
   },
 }
+export const ExternalObjectWithoutListText = domain.types.ExternalObjectWithoutListText = {
+  name: "ExternalObjectWithoutListText" as const,
+  displayName: "External Object Without List Text",
+  type: "object",
+  props: {
+    value: {
+      name: "value",
+      displayName: "Value",
+      type: "string",
+      role: "value",
+    },
+    child: {
+      name: "child",
+      displayName: "Child",
+      type: "object",
+      get typeDef() { return (domain.types.NestedExternalObjectWithoutListText as ObjectType & { name: "NestedExternalObjectWithoutListText" }) },
+      role: "value",
+    },
+  },
+}
 export const ExternalParent = domain.types.ExternalParent = {
   name: "ExternalParent" as const,
   displayName: "External Parent",
@@ -5737,6 +5929,19 @@ export const Location = domain.types.Location = {
     },
   },
 }
+export const NestedExternalObjectWithoutListText = domain.types.NestedExternalObjectWithoutListText = {
+  name: "NestedExternalObjectWithoutListText" as const,
+  displayName: "Nested External Object Without List Text",
+  type: "object",
+  props: {
+    value: {
+      name: "value",
+      displayName: "Value",
+      type: "string",
+      role: "value",
+    },
+  },
+}
 export const OutputOnlyExternalTypeWithoutDefaultCtor = domain.types.OutputOnlyExternalTypeWithoutDefaultCtor = {
   name: "OutputOnlyExternalTypeWithoutDefaultCtor" as const,
   displayName: "Output Only External Type Without Default Ctor",
@@ -5851,6 +6056,29 @@ export const PersonCriteria = domain.types.PersonCriteria = {
       displayName: "Admin Only",
       type: "string",
       role: "value",
+    },
+  },
+}
+export const PersonRecord = domain.types.PersonRecord = {
+  name: "PersonRecord" as const,
+  displayName: "Person Record",
+  get displayProp() { return this.props.name }, 
+  type: "object",
+  props: {
+    personId: {
+      name: "personId",
+      displayName: "Person Id",
+      type: "number",
+      role: "value",
+    },
+    name: {
+      name: "name",
+      displayName: "Name",
+      type: "string",
+      role: "value",
+      rules: {
+        required: val => (val != null && val !== '') || "Name is required.",
+      }
     },
   },
 }
@@ -6162,11 +6390,14 @@ interface AppDomain extends Domain {
     AbstractModelPerson: typeof AbstractModelPerson
     Advisor: typeof Advisor
     Case: typeof Case
+    CaseAutoReadDto: typeof CaseAutoReadDto
     CaseDtoStandalone: typeof CaseDtoStandalone
+    CaseDtoWithExternalObject: typeof CaseDtoWithExternalObject
     CaseProduct: typeof CaseProduct
     Company: typeof Company
     ComplexModel: typeof ComplexModel
     ComplexModelDependent: typeof ComplexModelDependent
+    ContentViewEntity: typeof ContentViewEntity
     Course: typeof Course
     DateOnlyPk: typeof DateOnlyPk
     DateTimeOffsetPk: typeof DateTimeOffsetPk
@@ -6175,6 +6406,7 @@ interface AppDomain extends Domain {
     ExternalChild: typeof ExternalChild
     ExternalChildAsInputOnly: typeof ExternalChildAsInputOnly
     ExternalChildAsOutputOnly: typeof ExternalChildAsOutputOnly
+    ExternalObjectWithoutListText: typeof ExternalObjectWithoutListText
     ExternalParent: typeof ExternalParent
     ExternalParentAsInputOnly: typeof ExternalParentAsInputOnly
     ExternalParentAsOutputOnly: typeof ExternalParentAsOutputOnly
@@ -6187,6 +6419,7 @@ interface AppDomain extends Domain {
     InputOutputOnlyExternalTypeWithRequiredNonscalarProp: typeof InputOutputOnlyExternalTypeWithRequiredNonscalarProp
     Location: typeof Location
     MultipleParents: typeof MultipleParents
+    NestedExternalObjectWithoutListText: typeof NestedExternalObjectWithoutListText
     OneToOneManyChildren: typeof OneToOneManyChildren
     OneToOneParent: typeof OneToOneParent
     OneToOneSeparateKeyChild: typeof OneToOneSeparateKeyChild
@@ -6199,6 +6432,7 @@ interface AppDomain extends Domain {
     Parent2: typeof Parent2
     Person: typeof Person
     PersonCriteria: typeof PersonCriteria
+    PersonRecord: typeof PersonRecord
     PositionalRecord: typeof PositionalRecord
     Product: typeof Product
     ReadOnlyEntityUsedAsMethodInput: typeof ReadOnlyEntityUsedAsMethodInput

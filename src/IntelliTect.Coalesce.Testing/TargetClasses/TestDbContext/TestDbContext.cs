@@ -55,6 +55,7 @@ public class AppDbContext : DbContext
     public DbSet<TimeOnlyPk> TimeOnlyPks { get; set; }
 
     public DbSet<SuppressedDefaultOrdering> SuppressedDefaultOrderings { get; set; }
+    public DbSet<ContentViewEntity> ContentViewEntities { get; set; }
 
     public DbSet<Student> Students { get; set; }
     public DbSet<Advisor> Advisors { get; set; }

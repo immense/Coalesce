@@ -281,6 +281,30 @@ export class CaseListViewModel extends ListViewModel<$models.Case, $apiClients.C
 }
 
 
+export interface CaseAutoReadDtoViewModel extends $models.CaseAutoReadDto {
+  caseId: number | null;
+  title: string | null;
+  assignedToName: string | null;
+  reportedBy: $models.PersonRecord | null;
+  productNames: string[] | null;
+}
+export class CaseAutoReadDtoViewModel extends ViewModel<$models.CaseAutoReadDto, $apiClients.CaseAutoReadDtoApiClient, number> implements $models.CaseAutoReadDto  {
+  
+  constructor(initialData?: DeepPartial<$models.CaseAutoReadDto> | null) {
+    super($metadata.CaseAutoReadDto, new $apiClients.CaseAutoReadDtoApiClient(), initialData)
+    this.$saveMode = "whole"
+  }
+}
+defineProps(CaseAutoReadDtoViewModel, $metadata.CaseAutoReadDto)
+
+export class CaseAutoReadDtoListViewModel extends ListViewModel<$models.CaseAutoReadDto, $apiClients.CaseAutoReadDtoApiClient, CaseAutoReadDtoViewModel> {
+  
+  constructor() {
+    super($metadata.CaseAutoReadDto, new $apiClients.CaseAutoReadDtoApiClient())
+  }
+}
+
+
 export interface CaseDtoStandaloneViewModel extends $models.CaseDtoStandalone {
   caseId: number | null;
   title: string | null;
@@ -298,6 +322,28 @@ export class CaseDtoStandaloneListViewModel extends ListViewModel<$models.CaseDt
   
   constructor() {
     super($metadata.CaseDtoStandalone, new $apiClients.CaseDtoStandaloneApiClient())
+  }
+}
+
+
+export interface CaseDtoWithExternalObjectViewModel extends $models.CaseDtoWithExternalObject {
+  caseKey: number | null;
+  title: string | null;
+  externalObject: $models.ExternalObjectWithoutListText | null;
+}
+export class CaseDtoWithExternalObjectViewModel extends ViewModel<$models.CaseDtoWithExternalObject, $apiClients.CaseDtoWithExternalObjectApiClient, number> implements $models.CaseDtoWithExternalObject  {
+  
+  constructor(initialData?: DeepPartial<$models.CaseDtoWithExternalObject> | null) {
+    super($metadata.CaseDtoWithExternalObject, new $apiClients.CaseDtoWithExternalObjectApiClient(), initialData)
+    this.$saveMode = "whole"
+  }
+}
+defineProps(CaseDtoWithExternalObjectViewModel, $metadata.CaseDtoWithExternalObject)
+
+export class CaseDtoWithExternalObjectListViewModel extends ListViewModel<$models.CaseDtoWithExternalObject, $apiClients.CaseDtoWithExternalObjectApiClient, CaseDtoWithExternalObjectViewModel> {
+  
+  constructor() {
+    super($metadata.CaseDtoWithExternalObject, new $apiClients.CaseDtoWithExternalObjectApiClient())
   }
 }
 
@@ -943,6 +989,33 @@ export class ComplexModelDependentListViewModel extends ListViewModel<$models.Co
   
   constructor() {
     super($metadata.ComplexModelDependent, new $apiClients.ComplexModelDependentApiClient())
+  }
+}
+
+
+export interface ContentViewEntityViewModel extends $models.ContentViewEntity {
+  contentViewEntityId: number | null;
+  name: string | null;
+  description: string | null;
+  assignedToId: number | null;
+  assignedTo: $models.PersonSummary | null;
+  reportedById: number | null;
+  get reportedBy(): PersonViewModel | null;
+  set reportedBy(value: PersonViewModel | $models.Person | null);
+  neverMapped: string | null;
+}
+export class ContentViewEntityViewModel extends ViewModel<$models.ContentViewEntity, $apiClients.ContentViewEntityApiClient, number> implements $models.ContentViewEntity  {
+  
+  constructor(initialData?: DeepPartial<$models.ContentViewEntity> | null) {
+    super($metadata.ContentViewEntity, new $apiClients.ContentViewEntityApiClient(), initialData)
+  }
+}
+defineProps(ContentViewEntityViewModel, $metadata.ContentViewEntity)
+
+export class ContentViewEntityListViewModel extends ListViewModel<$models.ContentViewEntity, $apiClients.ContentViewEntityApiClient, ContentViewEntityViewModel> {
+  
+  constructor() {
+    super($metadata.ContentViewEntity, new $apiClients.ContentViewEntityApiClient())
   }
 }
 
@@ -1905,11 +1978,14 @@ const viewModelTypeLookup = ViewModel.typeLookup = {
   AbstractModelPerson: AbstractModelPersonViewModel,
   Advisor: AdvisorViewModel,
   Case: CaseViewModel,
+  CaseAutoReadDto: CaseAutoReadDtoViewModel,
   CaseDtoStandalone: CaseDtoStandaloneViewModel,
+  CaseDtoWithExternalObject: CaseDtoWithExternalObjectViewModel,
   CaseProduct: CaseProductViewModel,
   Company: CompanyViewModel,
   ComplexModel: ComplexModelViewModel,
   ComplexModelDependent: ComplexModelDependentViewModel,
+  ContentViewEntity: ContentViewEntityViewModel,
   Course: CourseViewModel,
   DateOnlyPk: DateOnlyPkViewModel,
   DateTimeOffsetPk: DateTimeOffsetPkViewModel,
@@ -1949,11 +2025,14 @@ const listViewModelTypeLookup = ListViewModel.typeLookup = {
   AbstractModelPerson: AbstractModelPersonListViewModel,
   Advisor: AdvisorListViewModel,
   Case: CaseListViewModel,
+  CaseAutoReadDto: CaseAutoReadDtoListViewModel,
   CaseDtoStandalone: CaseDtoStandaloneListViewModel,
+  CaseDtoWithExternalObject: CaseDtoWithExternalObjectListViewModel,
   CaseProduct: CaseProductListViewModel,
   Company: CompanyListViewModel,
   ComplexModel: ComplexModelListViewModel,
   ComplexModelDependent: ComplexModelDependentListViewModel,
+  ContentViewEntity: ContentViewEntityListViewModel,
   Course: CourseListViewModel,
   DateOnlyPk: DateOnlyPkListViewModel,
   DateTimeOffsetPk: DateTimeOffsetPkListViewModel,
