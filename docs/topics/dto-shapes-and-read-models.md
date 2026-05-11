@@ -33,3 +33,9 @@ Those summary shapes are the foundation for later flattened-property and auto-pr
 Coalesce can now generate flattened DTO properties from selected navigation paths so callers can bind to the data they actually need without manually creating one-off view types for every combination.
 
 This keeps generated read models compact while still making important related values available as first-class DTO members.
+
+## Type discovery can merge results across referenced projects
+
+Generators no longer have to assume that every relevant type lives in the same project as the active startup target.
+
+When your solution is split across multiple projects, Coalesce can merge discovered types across those project boundaries so generated DTOs and read shapes still resolve the right sources.
