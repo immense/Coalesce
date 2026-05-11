@@ -1,0 +1,48 @@
+name: Preview NuGet packages
+
+on:
+  push:
+    branches:
+      - "ci/**"
+      - "feat/**"
+      - "fix/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    uses: ./.github/workflows/part-compute-version.yml
+    secrets: inherit
+    with:
+      prereleaseSlug: preview
+
+  build:
+    uses: ./.github/workflows/part-build.yml
+    secrets: inherit
+    needs: meta
+    with:
+      COALESCE_VERSION: ${{ needs.meta.outputs.COALESCE_VERSION }}
+
+  publish-nuget:
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download NuGet packages artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: out/packages
+
+      - name: Push packages to GitHub Packages
+        run: dotnet nuget push "out/packages/*.nupkg" --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key ${{ github.token }} --skip-duplicate
