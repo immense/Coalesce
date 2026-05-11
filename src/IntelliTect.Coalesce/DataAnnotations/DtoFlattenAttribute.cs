@@ -22,4 +22,14 @@ public sealed class DtoFlattenAttribute : Attribute
     /// Optional generated property name. Defaults to the concatenated path segments.
     /// </summary>
     public string? Name { get; set; }
+
+    /// <summary>
+    /// Comma-delimited list of content views this flattened property should be included on.
+    /// </summary>
+    public string? ContentViews { get; set; }
+
+    /// <summary>
+    /// Comma-delimited list of content views this flattened property should be excluded from.
+    /// </summary>
+    public string? ExcludedContentViews { get; set; }
 }

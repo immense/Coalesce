@@ -129,8 +129,18 @@ export class CaseApiClient extends ModelApiClient<$models.Case> {
 }
 
 
+export class CaseAutoReadDtoApiClient extends ModelApiClient<$models.CaseAutoReadDto> {
+  constructor() { super($metadata.CaseAutoReadDto) }
+}
+
+
 export class CaseDtoStandaloneApiClient extends ModelApiClient<$models.CaseDtoStandalone> {
   constructor() { super($metadata.CaseDtoStandalone) }
+}
+
+
+export class CaseDtoWithExternalObjectApiClient extends ModelApiClient<$models.CaseDtoWithExternalObject> {
+  constructor() { super($metadata.CaseDtoWithExternalObject) }
 }
 
 
@@ -564,6 +574,11 @@ export class ComplexModelDependentApiClient extends ModelApiClient<$models.Compl
     return this.$invoke($method, $params, $config)
   }
   
+}
+
+
+export class ContentViewEntityApiClient extends ModelApiClient<$models.ContentViewEntity> {
+  constructor() { super($metadata.ContentViewEntity) }
 }
 
 

@@ -51,3 +51,9 @@ That makes it practical to define response-shape contracts, transport-specific i
 When solutions intentionally restrict generation to a whitelisted DbContext root, Coalesce validation now respects that scope instead of treating out-of-scope types as hard blockers.
 
 That keeps the generated-shape pipeline usable in larger solutions where multiple DbContexts or model roots exist side by side.
+
+## Auto-projected read shapes can model read APIs directly
+
+Coalesce can now generate auto-projected read shapes for scenarios where the response model is intentionally smaller or differently organized than the backing entity.
+
+This is the layer that makes richer read DTOs practical without forcing every read endpoint to rely on hand-written projection types.

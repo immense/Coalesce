@@ -150,11 +150,20 @@ internal static class ValidateContext
 
                     if (prop.IsPOCO && prop.EntityFrameworkPropertyKind is not EntityFrameworkPropertyKind.Scalar and not EntityFrameworkPropertyKind.Complex)
                     {
-                        assert.IsNotNull(
-                            prop.Object?.ListTextProperty,
-                            $"{prop.Object} has no discernible display text. Add a [ListTextAttribute] to one of its properties."
-                            + (prop.Object?.HasDbSet == false ? " If the type was meant to be an EF entity, add a corresponding DbSet property to your DbContext." : ""),
-                            isWarning: true);
+                        var requiresDisplayText =
+                            prop.ReferenceNavigationProperty is not null
+                            || prop.Object is { IsDbMappedType: true }
+                            || prop.Object is { IsStandaloneEntity: true }
+                            || prop.Object is { IsCustomDto: true };
+
+                        if (requiresDisplayText)
+                        {
+                            assert.IsNotNull(
+                                prop.Object?.ListTextProperty,
+                                $"{prop.Object} has no discernible display text. Add a [ListTextAttribute] to one of its properties."
+                                + (prop.Object?.HasDbSet == false ? " If the type was meant to be an EF entity, add a corresponding DbSet property to your DbContext." : ""),
+                                isWarning: true);
+                        }
                         if (!prop.IsReadOnly && !prop.HasNotMapped && prop.Object?.HasDbSet == true)
                         {
                             // Validate navigation properties
