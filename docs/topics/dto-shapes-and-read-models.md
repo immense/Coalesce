@@ -39,3 +39,9 @@ This keeps generated read models compact while still making important related va
 Generators no longer have to assume that every relevant type lives in the same project as the active startup target.
 
 When your solution is split across multiple projects, Coalesce can merge discovered types across those project boundaries so generated DTOs and read shapes still resolve the right sources.
+
+## Generated contract shapes let you declare DTO outputs from the source type
+
+Generated contract shapes give you a way to describe class or interface outputs directly from the source model without hand-writing every generated contract by hand.
+
+That makes it practical to define response-shape contracts, transport-specific interfaces, and other generated DTO surfaces while keeping the source of truth close to the domain type.
