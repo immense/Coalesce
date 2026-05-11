@@ -234,6 +234,30 @@ public class PropertyViewModelTests
     }
 
     [Test]
+    [PropertyViewModelData<FluentConfiguredEntity>(nameof(FluentConfiguredEntity.TenantScopedKey))]
+    public async Task FluentPrimaryKey_UsesSinglePropertyEfKey(PropertyViewModelData data)
+    {
+        PropertyViewModel prop = data;
+
+        await Assert.That(prop.IsPrimaryKey).IsTrue();
+        await Assert.That(prop.Parent.PrimaryKey).IsEqualTo(prop);
+    }
+
+    [Test]
+    [PropertyViewModelData<FluentConfiguredEntity>(nameof(FluentConfiguredEntity.OwnedValue), (int)EntityFrameworkPropertyKind.Complex)]
+    [PropertyViewModelData<FluentConfiguredEntity>(nameof(FluentConfiguredEntity.ConvertedValue), (int)EntityFrameworkPropertyKind.Scalar)]
+#if NET10_0_OR_GREATER
+    [PropertyViewModelData<FluentConfiguredEntity>(nameof(FluentConfiguredEntity.ComplexValue), (int)EntityFrameworkPropertyKind.Complex)]
+#endif
+    public async Task EntityFrameworkPropertyKind_UsesEfMetadata(PropertyViewModelData data, int expected)
+    {
+        PropertyViewModel prop = data;
+
+        await Assert.That(prop.EntityFrameworkPropertyKind).IsEqualTo((EntityFrameworkPropertyKind)expected);
+        await Assert.That(prop.Role).IsEqualTo(PropertyRole.Value);
+    }
+
+    [Test]
     [ClassViewModelData(typeof(ExternalParentAsInputOnly), false, true, false)]
     [ClassViewModelData(typeof(ExternalChildAsInputOnly), false, true, false)]
     [ClassViewModelData(typeof(ExternalParentAsOutputOnly), true, false, false)]
