@@ -45,3 +45,9 @@ When your solution is split across multiple projects, Coalesce can merge discove
 Generated contract shapes give you a way to describe class or interface outputs directly from the source model without hand-writing every generated contract by hand.
 
 That makes it practical to define response-shape contracts, transport-specific interfaces, and other generated DTO surfaces while keeping the source of truth close to the domain type.
+
+## Validation can honor the intended DbContext root scope
+
+When solutions intentionally restrict generation to a whitelisted DbContext root, Coalesce validation now respects that scope instead of treating out-of-scope types as hard blockers.
+
+That keeps the generated-shape pipeline usable in larger solutions where multiple DbContexts or model roots exist side by side.
