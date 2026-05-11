@@ -2,10 +2,15 @@
 
 using IntelliTect.Coalesce.CodeGeneration.Analysis.Base;
 using IntelliTect.Coalesce.CodeGeneration.Analysis.Roslyn;
+using IntelliTect.Coalesce.DataAnnotations;
 using IntelliTect.Coalesce.CodeGeneration.Generation;
 using IntelliTect.Coalesce.TypeDefinition;
 using IntelliTect.Coalesce.Utilities;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Formatting;
+using Microsoft.CodeAnalysis.Formatting;
+using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,13 +24,14 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
 {
     private const string ShapeAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractShapeAttribute";
     private const string AliasAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractAliasAttribute";
+    private const string DtoSourceAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.DtoSourceAttribute";
     private const string NullableAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractNullableAttribute";
     private const string NonNullableAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractNonNullableAttribute";
     private const int ExplicitPolicy = 0;
     private const int PublicScalarPropertiesPolicy = 1;
     private const int ClassOutputKind = 0;
     private const int InterfaceOutputKind = 1;
-    private const string GeneratedContractsRelativePath = "Generated/Contracts";
+    internal const string GeneratedContractsRelativePath = "Generated/Contracts";
 
     public GeneratedContracts(CompositeGeneratorServices services) : base(services)
     {
@@ -185,7 +191,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             $"for shape '{shape.TypeName}' on '{sourceType.ToDisplayString()}'.");
     }
 
-    private static IEnumerable<ContractShape> GetShapes(INamedTypeSymbol sourceType)
+    internal static IEnumerable<ContractShape> GetShapes(INamedTypeSymbol sourceType)
         => sourceType.GetAttributes()
             .Where(IsShapeAttribute)
             .Select(ParseShape)
@@ -212,7 +218,8 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Members)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.ExcludedMembers)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Implements)),
-            GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.SettableProperties)));
+            GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.SettableProperties)),
+            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)));
     }
 
     private static int GetInt(AttributeData attribute, string name)
@@ -259,11 +266,29 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         return false;
     }
 
-    private static IReadOnlyList<ContractPropertyModel> ResolveProperties(INamedTypeSymbol sourceType, ContractShape shape)
+    private static string? GetString(AttributeData attribute, string name)
+    {
+        foreach (var argument in attribute.NamedArguments)
+        {
+            if (argument.Key == name && argument.Value.Value is string value)
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    internal static IReadOnlyList<ContractPropertyModel> ResolveProperties(INamedTypeSymbol sourceType, ContractShape shape)
     {
         var memberNames = ResolveMembers(sourceType, shape);
         if (memberNames.Count == 0)
         {
+            if (shape.OutputKind == InterfaceOutputKind)
+            {
+                return [];
+            }
+
             throw new InvalidOperationException(
                 $"Generated contract '{shape.TypeName}' on '{sourceType.ToDisplayString()}' must declare at least one member.");
         }
@@ -278,8 +303,9 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             properties.Add(new ContractPropertyModel(
                 GetAlias(property, shape.ShapeName) ?? property.Name,
                 property,
-                HasAttribute(property, NullableAttributeMetadataName, shape.ShapeName),
-                HasAttribute(property, NonNullableAttributeMetadataName, shape.ShapeName)));
+                ShouldForceNullable(property, shape),
+                HasAttribute(property, NonNullableAttributeMetadataName, shape.ShapeName),
+                GetDtoSource(property)));
         }
 
         return properties;
@@ -361,10 +387,54 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             .Select(attribute => (string?)attribute.ConstructorArguments[1].Value)
             .FirstOrDefault(alias => !string.IsNullOrWhiteSpace(alias));
 
+    private static DtoSourceMetadata? GetDtoSource(IPropertySymbol property)
+    {
+        var attribute = property.GetAttributes()
+            .FirstOrDefault(attribute => attribute.AttributeClass?.ToDisplayString() == DtoSourceAttributeMetadataName);
+
+        if (attribute is null || attribute.ConstructorArguments.Length == 0)
+        {
+            return null;
+        }
+
+        var path = (string?)attribute.ConstructorArguments[0].Value;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        return new DtoSourceMetadata(
+            path,
+            GetString(attribute, nameof(DtoSourceAttribute.OrderBy)),
+            GetInt(attribute, nameof(DtoSourceAttribute.OrderByDirection)));
+    }
+
     private static bool HasAttribute(IPropertySymbol property, string attributeMetadataName, string shapeName)
         => property.GetAttributes().Any(attribute =>
             attribute.AttributeClass?.ToDisplayString() == attributeMetadataName &&
             string.Equals((string?)attribute.ConstructorArguments[0].Value, shapeName, StringComparison.Ordinal));
+
+    private static bool ShouldForceNullable(IPropertySymbol property, ContractShape shape)
+    {
+        if (HasAttribute(property, NonNullableAttributeMetadataName, shape.ShapeName))
+        {
+            return false;
+        }
+
+        if (HasAttribute(property, NullableAttributeMetadataName, shape.ShapeName))
+        {
+            return true;
+        }
+
+        var transform = (GeneratedContractNullabilityTransform)shape.NullabilityTransform;
+        if (transform == GeneratedContractNullabilityTransform.None)
+        {
+            return false;
+        }
+
+        return (transform.HasFlag(GeneratedContractNullabilityTransform.NullableReferenceTypes) && property.Type.IsReferenceType)
+            || (transform.HasFlag(GeneratedContractNullabilityTransform.NullableValueTypes) && IsNonNullableValueType(property.Type));
+    }
 
     private static bool IsScalarLikeType(ITypeSymbol type)
     {
@@ -454,6 +524,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         public static string[] ExcludedMembers { get; set; } = [];
         public static string[] Implements { get; set; } = [];
         public static bool SettableProperties { get; set; }
+        public static int NullabilityTransform { get; set; }
     }
 
     internal sealed record ContractShape(
@@ -466,7 +537,8 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         IReadOnlyList<string> Members,
         IReadOnlyList<string> ExcludedMembers,
         IReadOnlyList<string> Implements,
-        bool SettableProperties);
+        bool SettableProperties,
+        int NullabilityTransform);
 
     internal sealed record GeneratedContractFileModel(
         ContractShape Shape,
@@ -477,7 +549,24 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         string Name,
         IPropertySymbol Property,
         bool ForceNullable,
-        bool ForceNonNullable);
+        bool ForceNonNullable,
+        DtoSourceMetadata? DtoSource);
+
+    internal sealed record DtoSourceMetadata(
+        string Path,
+        string? OrderBy,
+        int OrderByDirection);
+
+    private static bool IsNonNullableValueType(ITypeSymbol type)
+    {
+        if (!type.IsValueType)
+        {
+            return false;
+        }
+
+        return type is not INamedTypeSymbol named
+            || named.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T;
+    }
 }
 
 internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<GeneratedContracts.GeneratedContractFileModel>
@@ -496,39 +585,108 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
     }
 
     public override void BuildOutput(CSharpCodeBuilder b)
+        => BuildOutput(b, Model);
+
+    internal static SyntaxTree CreateSyntaxTree(
+        GeneratedContracts.GeneratedContractFileModel model,
+        CSharpParseOptions? parseOptions = null,
+        string? path = null)
+        => CSharpSyntaxTree.ParseText(
+            SourceText.From(Render(model)),
+            parseOptions ?? CSharpParseOptions.Default,
+            path ?? string.Empty);
+
+    internal static string Render(
+        GeneratedContracts.GeneratedContractFileModel model,
+        int indentationSize = 4)
+    {
+        var b = new CSharpCodeBuilder();
+        BuildOutput(b, model);
+        var output = b.ToString();
+
+        var syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(output));
+        var root = syntaxTree.GetRoot();
+
+        using var workspace = new AdhocWorkspace();
+        var options = workspace.Options
+            .WithChangedOption(FormattingOptions.NewLine, LanguageNames.CSharp, Environment.NewLine)
+            .WithChangedOption(FormattingOptions.UseTabs, LanguageNames.CSharp, false)
+            .WithChangedOption(FormattingOptions.IndentationSize, LanguageNames.CSharp, indentationSize)
+            .WithChangedOption(FormattingOptions.SmartIndent, LanguageNames.CSharp, FormattingOptions.IndentStyle.Smart)
+            .WithChangedOption(CSharpFormattingOptions.WrappingKeepStatementsOnSingleLine, true);
+
+        root = Formatter.Format(root, workspace, options);
+        return root.ToFullString();
+    }
+
+    private static void BuildOutput(CSharpCodeBuilder b, GeneratedContracts.GeneratedContractFileModel model)
     {
         b.Line("// <auto-generated />");
         b.Line("#nullable enable");
         b.Line();
-        b.Line($"namespace {Model.Shape.TargetNamespace};");
+        b.Line($"namespace {model.Shape.TargetNamespace};");
         b.Line();
 
-        var declarationKind = Model.Shape.OutputKind == 1 ? "interface" : "partial class";
-        var implements = Model.Shape.Implements.Count > 0
-            ? " : " + string.Join(", ", Model.Shape.Implements.Select(NormalizeTypeName))
+        var declarationKind = model.Shape.OutputKind == 1 ? "interface" : "partial class";
+        var implements = model.Shape.Implements.Count > 0
+            ? " : " + string.Join(", ", model.Shape.Implements.Select(NormalizeTypeName))
             : string.Empty;
 
-        using (b.Block($"public {declarationKind} {Model.Shape.TypeName}{implements}"))
+        using (b.Block($"public {declarationKind} {model.Shape.TypeName}{implements}"))
         {
-            foreach (var property in Model.Properties)
+            foreach (var property in model.Properties)
             {
-                b.Line(BuildProperty(property));
+                foreach (var line in BuildPropertyLines(model, property))
+                {
+                    b.Line(line);
+                }
             }
         }
     }
 
-    private string BuildProperty(GeneratedContracts.ContractPropertyModel property)
+    private static IEnumerable<string> BuildPropertyLines(
+        GeneratedContracts.GeneratedContractFileModel model,
+        GeneratedContracts.ContractPropertyModel property)
     {
-        var typeName = GetTypeName(property);
-        if (Model.Shape.OutputKind == 1)
+        if (property.DtoSource is { } dtoSource)
         {
-            var accessor = Model.Shape.SettableProperties ? "{ get; set; }" : "{ get; }";
-            return $"{typeName} {property.Name} {accessor}";
+            yield return BuildDtoSourceAttribute(dtoSource);
+        }
+
+        var typeName = GetTypeName(property);
+        if (model.Shape.OutputKind == 1)
+        {
+            var accessor = model.Shape.SettableProperties ? "{ get; set; }" : "{ get; }";
+            yield return $"{typeName} {property.Name} {accessor}";
+            yield break;
         }
 
         var required = NeedsRequiredKeyword(property) ? "required " : string.Empty;
         var initializer = HasCollectionInitializer(property) ? " = [];" : string.Empty;
-        return $"public {required}{typeName} {property.Name} {{ get; set; }}{initializer}";
+        yield return $"public {required}{typeName} {property.Name} {{ get; set; }}{initializer}";
+    }
+
+    private static string BuildDtoSourceAttribute(GeneratedContracts.DtoSourceMetadata dtoSource)
+    {
+        var args = new List<string>
+        {
+            SymbolDisplay.FormatLiteral(dtoSource.Path, quote: true)
+        };
+
+        if (!string.IsNullOrWhiteSpace(dtoSource.OrderBy))
+        {
+            args.Add($"OrderBy = {SymbolDisplay.FormatLiteral(dtoSource.OrderBy, quote: true)}");
+        }
+
+        if (dtoSource.OrderByDirection != 0)
+        {
+            var direction = dtoSource.OrderByDirection == 1 ? "Descending" : "Ascending";
+            args.Add(
+                "OrderByDirection = " +
+                $"global::IntelliTect.Coalesce.DataAnnotations.DefaultOrderByAttribute.OrderByDirections.{direction}");
+        }
+
+        return $"[global::IntelliTect.Coalesce.DataAnnotations.DtoSource({string.Join(", ", args)})]";
     }
 
     private static string GetTypeName(GeneratedContracts.ContractPropertyModel property)
