@@ -761,12 +761,9 @@ export const Case = domain.types.Case = {
     assignedTo: {
       name: "assignedTo",
       displayName: "Assigned To",
-      type: "model",
-      get typeDef() { return (domain.types.Person as ModelType & { name: "Person" }) },
-      role: "referenceNavigation",
-      get foreignKey() { return (domain.types.Case as ModelType & { name: "Case" }).props.assignedToId as ForeignKeyProperty },
-      get principalKey() { return (domain.types.Person as ModelType & { name: "Person" }).props.personId as PrimaryKeyProperty },
-      get inverseNavigation() { return (domain.types.Person as ModelType & { name: "Person" }).props.casesAssigned as ModelCollectionNavigationProperty },
+      type: "object",
+      get typeDef() { return (domain.types.PersonSummary as ObjectType & { name: "PersonSummary" }) },
+      role: "value",
       dontSerialize: true,
     },
     reportedById: {
@@ -5879,6 +5876,32 @@ export const WeatherData = domain.types.WeatherData = {
     },
   },
 }
+export const PersonSummary = domain.types.PersonSummary = {
+  name: "PersonSummary" as const,
+  displayName: "Person Summary",
+  type: "object",
+  get displayProp() { return this.props.name }, 
+  props: {
+    personId: {
+      name: "personId",
+      displayName: "Person Id",
+      type: "number",
+      role: "primaryKey",
+    },
+    name: {
+      name: "name",
+      displayName: "Name",
+      type: "string",
+      role: "value",
+    },
+    companyName: {
+      name: "companyName",
+      displayName: "Company Name",
+      type: "string",
+      role: "value",
+    },
+  },
+}
 export const WeatherService = domain.services.WeatherService = {
   name: "WeatherService",
   displayName: "Weather Service",
@@ -6020,6 +6043,7 @@ interface AppDomain extends Domain {
     ValidationTargetChild: typeof ValidationTargetChild
     WeatherData: typeof WeatherData
     ZipCode: typeof ZipCode
+    PersonSummary: typeof PersonSummary
   }
   services: {
     WeatherService: typeof WeatherService
