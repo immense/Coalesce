@@ -27,3 +27,9 @@ That lets the higher-level DTO and read-shape features work against richer EF mo
 Navigation summary DTOs add a smaller, purpose-built way to surface related model information in generated read APIs without always expanding full related entities.
 
 Those summary shapes are the foundation for later flattened-property and auto-projected read-shape features higher in the stack.
+
+## Flattened navigation-path properties can be emitted directly
+
+Coalesce can now generate flattened DTO properties from selected navigation paths so callers can bind to the data they actually need without manually creating one-off view types for every combination.
+
+This keeps generated read models compact while still making important related values available as first-class DTO members.
