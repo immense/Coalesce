@@ -205,7 +205,7 @@ public class ReflectionRepository
             return;
         }
 
-        if (_rootTypeWhitelist != null && !_rootTypeWhitelist.Contains(type.Name))
+        if (!IsWhitelistedRoot(type))
         {
             return;
         }
@@ -220,7 +220,10 @@ public class ReflectionRepository
         {
             var context = new DbContextTypeUsage(type.ClassViewModel!);
 
-            var entityCvms = context.Entities.Select(e => GetOrAddType(e.TypeViewModel).ClassViewModel!);
+            var whitelistedEntities = context.Entities
+                .Where(entity => IsWhitelistedRoot(entity.TypeViewModel))
+                .ToList();
+            var entityCvms = whitelistedEntities.Select(e => GetOrAddType(e.TypeViewModel).ClassViewModel!);
 
             _contexts.Add(context);
             _entities.AddRange(entityCvms);
@@ -230,7 +233,7 @@ public class ReflectionRepository
 
             ClearEntityUsageCache();
 
-            foreach (var entity in context.Entities)
+            foreach (var entity in whitelistedEntities)
             {
                 DiscoverOnApiBackedClass(entity.TypeViewModel.ClassViewModel!);
             }
@@ -282,6 +285,9 @@ public class ReflectionRepository
             DiscoverNestedCrudStrategiesOn(classViewModel);
         }
     }
+
+    private bool IsWhitelistedRoot(TypeViewModel type)
+        => _rootTypeWhitelist == null || _rootTypeWhitelist.Contains(type.Name);
 
     private void ClearEntityUsageCache()
     {
