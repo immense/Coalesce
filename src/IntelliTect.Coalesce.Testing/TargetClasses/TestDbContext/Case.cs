@@ -10,6 +10,8 @@ namespace IntelliTect.Coalesce.Testing.TargetClasses.TestDbContext;
 
 [Table("Case")]
 [Create(PermissionLevel = SecurityPermissionLevels.AllowAll)]
+[DtoFlatten("AssignedTo.Name")]
+[DtoFlatten("ReportedBy.Company.Name")]
 public class Case
 {
     public enum Statuses

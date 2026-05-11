@@ -217,6 +217,10 @@ public abstract class ClassViewModel : IAttributeProvider
                 and not TypeDiscriminator.Unknown
         );
 
+    private IReadOnlyList<FlattenedResponsePropertyViewModel>? _flattenedResponseProperties;
+    public IReadOnlyList<FlattenedResponsePropertyViewModel> FlattenedResponseProperties
+        => _flattenedResponseProperties ??= FlattenedResponsePropertyViewModel.FromClass(this);
+
     /// <summary>
     /// List of method names that should not be exposed to the client.
     /// </summary>

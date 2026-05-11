@@ -272,6 +272,10 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
             {
                 WriteClassPropertyMetadata(b, model, prop);
             }
+            foreach (var prop in model.FlattenedResponseProperties)
+            {
+                WriteFlattenedClassPropertyMetadata(b, prop);
+            }
         }
     }
 
@@ -428,6 +432,23 @@ public class TsMetadata : StringBuilderFileGenerator<ReflectionRepository>
                     }
                 }
             }
+        }
+    }
+
+    private void WriteFlattenedClassPropertyMetadata(TypeScriptCodeBuilder b, FlattenedResponsePropertyViewModel prop)
+    {
+        using (b.Block($"{prop.Name.ToCamelCase()}:", ','))
+        {
+            b.StringProp("name", prop.Name.ToCamelCase());
+            b.StringProp("displayName", prop.DisplayName);
+
+            if (!string.IsNullOrWhiteSpace(prop.LeafProperty.Description))
+            {
+                b.StringProp("description", prop.LeafProperty.Description);
+            }
+
+            WriteTypeCommonMetadata(b, prop.Type, prop.LeafProperty);
+            b.StringProp("role", "value");
         }
     }
 
