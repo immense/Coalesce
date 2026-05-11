@@ -6,7 +6,12 @@
     <Description>Core code generation engine and services for Coalesce. Learn more at https://coalesce.intellitect.com/</Description>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Analysis/MsBuild/Targets/**" />
+    <EmbeddedResource Include="Analysis/MsBuild/Targets/Imports.targets"
+                      LogicalName="$(AssemblyName).Analysis.MsBuild.Targets.Imports.targets" />
+    <EmbeddedResource Include="Analysis/MsBuild/Targets/build/IntelliTect.Coalesce.CodeGeneration.Analysis.MsBuild.targets"
+                      LogicalName="$(AssemblyName).Analysis.MsBuild.Targets.build.IntelliTect.Coalesce.CodeGeneration.Analysis.MsBuild.targets" />
+    <EmbeddedResource Include="Analysis/MsBuild/Targets/buildMultiTargeting/IntelliTect.Coalesce.CodeGeneration.Analysis.MsBuild.targets"
+                      LogicalName="$(AssemblyName).Analysis.MsBuild.Targets.buildMultiTargeting.IntelliTect.Coalesce.CodeGeneration.Analysis.MsBuild.targets" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\IntelliTect.Coalesce\IntelliTect.Coalesce.csproj" />
