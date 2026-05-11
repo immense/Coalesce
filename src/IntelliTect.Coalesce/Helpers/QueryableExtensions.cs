@@ -22,18 +22,50 @@ public static class QueryableExtensions
         var model = (reflectionRepository ?? ReflectionRepository.Global).GetClassViewModel<T>()
             ?? throw new ArgumentException("Queried type is not a class");
 
+        var includePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var prop in model.ClientProperties.Where(f => f.CanAutoInclude))
         {
             if (prop.IsManyToManyCollection && prop.ManyToManyFarNavigationProperty.CanAutoInclude)
             {
-                query = query.Include(prop.Name + "." + prop.ManyToManyFarNavigationProperty!.Name);
+                includePaths.Add(prop.Name + "." + prop.ManyToManyFarNavigationProperty!.Name);
             }
             else
             {
-                query = query.Include(prop.Name);
+                includePaths.Add(prop.Name);
             }
         }
+
+        foreach (var flattened in model.FlattenedResponseProperties)
+        {
+            includePaths.Add(flattened.IncludePath);
+        }
+
+        AddReferenceSummaryIncludePaths(model, includePaths);
+
+        foreach (var includePath in includePaths)
+        {
+            query = query.Include(includePath);
+        }
+
         return query;
+    }
+
+    private static void AddReferenceSummaryIncludePaths(ClassViewModel model, HashSet<string> includePaths)
+    {
+        foreach (var prop in model.ClientProperties.Where(p => p.UsesDtoReferenceSummary && p.Object is not null))
+        {
+            var target = prop.Object!;
+            includePaths.Add(prop.Name);
+
+            foreach (var summaryProp in target.SummaryProperties)
+            {
+                if (!string.IsNullOrWhiteSpace(summaryProp.IncludePath))
+                {
+                    includePaths.Add($"{prop.Name}.{summaryProp.IncludePath}");
+                }
+            }
+        }
     }
 
     /// <summary>
