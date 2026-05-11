@@ -396,6 +396,7 @@ export default defineConfig({
 
           autoTitle("/topics/analyzers"),
           autoTitle("/topics/coalesce-json"),
+          autoTitle("/topics/dto-shapes-and-read-models"),
           autoTitle("/topics/eslint-plugin"),
           autoTitle("/topics/immutability"),
           autoTitle("/topics/startup"),
