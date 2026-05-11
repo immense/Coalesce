@@ -55,7 +55,7 @@ internal static class ValidateContext
         {
             assert.Area = model.ToString();
 
-            assert.IsNotNull(model.PrimaryKey, $"Primary key not found for {model}. Primary key should be named 'Id', '{model.Name}Id' or have the [Key] attribute.");
+            assert.IsNotNull(model.PrimaryKey, $"Primary key not found for {model}. Primary key should be named 'Id', '{model.Name}Id', have the [Key] attribute, or be configured as a single-property EF primary key.");
             if (model.PrimaryKey != null)
             {
                 assert.IsTrue(model.PrimaryKey.IsClientProperty, "Model primary keys must be exposed to the client.");
@@ -127,7 +127,7 @@ internal static class ValidateContext
                             "[DtoExcludesAttribute] has no effect on an IClassDto. This logic must be implemented manually in MapFrom.");
                     }
 
-                    if (prop.IsPOCO)
+                    if (prop.IsPOCO && prop.EntityFrameworkPropertyKind is not EntityFrameworkPropertyKind.Scalar and not EntityFrameworkPropertyKind.Complex)
                     {
                         assert.IsNotNull(
                             prop.Object?.ListTextProperty,
@@ -137,7 +137,7 @@ internal static class ValidateContext
                         {
                             // Validate navigation properties
                             assert.IsNotNull(prop.ForeignKeyProperty, "No ID Property found for related object. Related object needs a foreign key that matches by name or is marked with the [ForeignKey] attribute.");
-                            assert.IsNotNull(prop.Object.PrimaryKey, "No Primary key for related object. Ensure the target object has a [Key] attributed property.");
+                            assert.IsNotNull(prop.Object.PrimaryKey, "No primary key for related object. Ensure the target object has a [Key] attributed property, a conventional key name, or a single-property EF primary key.");
                         }
                     }
 
