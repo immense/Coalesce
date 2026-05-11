@@ -1,4 +1,3 @@
-using IntelliTect.Coalesce.CodeGeneration.Analysis.Roslyn;
 using IntelliTect.Coalesce.CodeGeneration.Api.Generators;
 using IntelliTect.Coalesce.CodeGeneration.Generation;
 using IntelliTect.Coalesce.Testing;
@@ -14,54 +13,6 @@ namespace IntelliTect.Coalesce.CodeGeneration.Tests;
 
 public class GeneratedContractShapeGenerationTests : CodeGenTestBase
 {
-    [Test]
-    public async Task SameProjectGeneratedContracts_AreMaterializedBeforeAnalysis()
-    {
-        var source = $$"""
-            #nullable enable
-            using IntelliTect.Coalesce.DataAnnotations;
-
-            namespace IntelliTect.Coalesce.Testing.GeneratedContracts;
-
-            [GeneratedContractShape(
-                "same-project-generated-contract",
-                GeneratedContractOutputKind.Interface,
-                "{{ReflectionRepositoryFactory.SymbolDiscoveryAssemblyName}}",
-                "IntelliTect.Coalesce.Testing.GeneratedContracts",
-                "ISameProjectGeneratedContract",
-                Members = [nameof(Name)])]
-            public class SameProjectGeneratedContractSource
-            {
-                public string Name { get; set; } = null!;
-            }
-
-            public class SameProjectGeneratedContractConsumer : ISameProjectGeneratedContract
-            {
-                public string Name { get; set; } = null!;
-            }
-            """;
-
-        var compilation = ReflectionRepositoryFactory.GetCompilation(
-            [CSharpSyntaxTree.ParseText(SourceText.From(source), path: "SameProjectGeneratedContractSource.cs")],
-            assertSuccess: false);
-
-        await Assert.That(compilation.GetDiagnostics().Any(d => d.Id == "CS0246")).IsTrue();
-
-        var augmentedCompilation = (CSharpCompilation)GeneratedContractCompilationAugmentor
-            .AugmentWithSameProjectGeneratedContracts(compilation, "/tmp/coalesce-generated-contracts-test");
-
-        ReflectionRepositoryFactory.AssertCompilationSuccess(augmentedCompilation);
-
-        var generatedInterface = augmentedCompilation.GetTypeByMetadataName(
-            "IntelliTect.Coalesce.Testing.GeneratedContracts.ISameProjectGeneratedContract");
-        var consumer = augmentedCompilation.GetTypeByMetadataName(
-            "IntelliTect.Coalesce.Testing.GeneratedContracts.SameProjectGeneratedContractConsumer");
-
-        await Assert.That(generatedInterface).IsNotNull();
-        await Assert.That(consumer).IsNotNull();
-        await Assert.That(consumer!.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, generatedInterface))).IsTrue();
-    }
-
     [Test]
     public async Task GeneratedContracts_SupportShapeLevelNullabilityTransforms()
     {

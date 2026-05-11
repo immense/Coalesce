@@ -58,11 +58,6 @@ public class RoslynTypeLocator : TypeLocator
             .WithMetadataReferences(_projectContext.GetMetadataReferences())
             .GetCompilationAsync().Result;
 
-        _compilation = GeneratedContractCompilationAugmentor.AugmentWithSameProjectGeneratedContracts(
-            _compilation,
-            _projectContext.ProjectPath,
-            parseOptions);
-
         return _compilation;
     }
 
