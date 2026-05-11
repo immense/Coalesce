@@ -15,3 +15,9 @@ That matters for DTO generation because it lets Coalesce analyze real-world grap
 When CLR metadata alone is not enough to determine the right key shape, Coalesce can now use EF metadata to infer the effective key for DTO and code-generation scenarios.
 
 This is especially important for generated read models and contract shapes, where key information has to stay stable even when the entity model is configured more heavily in EF than in attributes.
+
+## Owned and complex EF types do not block discovery
+
+Coalesce now tolerates EF-owned and complex/value-object shapes during metadata discovery instead of treating them like unsupported roots.
+
+That lets the higher-level DTO and read-shape features work against richer EF models without requiring you to flatten those value objects away first.
