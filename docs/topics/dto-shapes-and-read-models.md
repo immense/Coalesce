@@ -63,3 +63,9 @@ This is the layer that makes richer read DTOs practical without forcing every re
 Generated contract shapes are not limited to a single nullability policy. A single source type can now describe stricter read-facing contracts and more permissive write- or patch-facing contracts from the same model.
 
 That keeps generated interfaces and DTO classes aligned with their actual API semantics instead of forcing one nullability story onto every generated output.
+
+## Same-project generated contracts are available during analysis
+
+When generated contract shapes target the same project that declares the source type, Coalesce now materializes those generated contracts early enough for analysis and validation to see them consistently.
+
+That keeps same-project generated interfaces and classes usable without introducing duplicate-member diagnostics or forcing consumers to move those shapes into a different project.
