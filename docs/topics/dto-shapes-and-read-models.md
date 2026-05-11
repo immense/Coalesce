@@ -21,3 +21,9 @@ This is especially important for generated read models and contract shapes, wher
 Coalesce now tolerates EF-owned and complex/value-object shapes during metadata discovery instead of treating them like unsupported roots.
 
 That lets the higher-level DTO and read-shape features work against richer EF models without requiring you to flatten those value objects away first.
+
+## Navigation summary DTOs provide lightweight related-data shapes
+
+Navigation summary DTOs add a smaller, purpose-built way to surface related model information in generated read APIs without always expanding full related entities.
+
+Those summary shapes are the foundation for later flattened-property and auto-projected read-shape features higher in the stack.
