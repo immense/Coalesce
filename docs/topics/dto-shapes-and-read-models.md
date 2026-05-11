@@ -57,3 +57,9 @@ That keeps the generated-shape pipeline usable in larger solutions where multipl
 Coalesce can now generate auto-projected read shapes for scenarios where the response model is intentionally smaller or differently organized than the backing entity.
 
 This is the layer that makes richer read DTOs practical without forcing every read endpoint to rely on hand-written projection types.
+
+## Generated contract shapes can transform nullability per output
+
+Generated contract shapes are not limited to a single nullability policy. A single source type can now describe stricter read-facing contracts and more permissive write- or patch-facing contracts from the same model.
+
+That keeps generated interfaces and DTO classes aligned with their actual API semantics instead of forcing one nullability story onto every generated output.
