@@ -1,4 +1,7 @@
+#nullable enable
+
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -13,6 +16,7 @@ using IntelliTect.Coalesce.TypeDefinition;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 // ReSharper disable UnassignedGetOnlyAutoProperty
 
@@ -21,6 +25,15 @@ namespace IntelliTect.Coalesce.Cli;
 [HelpOption]
 public class Program
 {
+    private const string ModelsGeneratorName = "Models";
+    private const string ModelsGeneratorFullName = "IntelliTect.Coalesce.CodeGeneration.Api.Generators.Models";
+    private const string ControllersGeneratorName = "Controllers";
+    private const string ControllersGeneratorFullName = "IntelliTect.Coalesce.CodeGeneration.Api.Generators.Controllers";
+    private const string ScriptsGeneratorName = "Scripts";
+    private const string ScriptsGeneratorFullName = "IntelliTect.Coalesce.CodeGeneration.Vue.Generators.Scripts";
+    private const string KernelPluginsGeneratorName = "KernelPlugins";
+    private const string KernelPluginsGeneratorFullName = "IntelliTect.Coalesce.CodeGeneration.Api.Generators.KernelPlugins";
+
     [Option(CommandOptionType.NoValue,
         Description = "Wait for a debugger to be attached before starting generation", LongName = "debug",
         ShortName = "d")]
@@ -34,14 +47,19 @@ public class Program
         Description = "Verify that no output changes have been made. Use in CI builds to ensure that codegen has not been forgotten.", LongName = "verify", ShortName = "")]
     public bool Verify { get; }
 
+    [Option(CommandOptionType.SingleValue,
+        Description = "Write Coalesce-generated C# Models/Generated and Api/Generated outputs as a JSON map to the specified file path. Intended for the Coalesce source generator.",
+        LongName = "emit-csharp-sourcegen")]
+    public string? EmitCSharpSourceGenOutput { get; }
+
     [Argument(0, "config", Description =
         "Path to a coalesce.json configuration file that will drive generation.  If not specified, it will search in current folder.")]
-    public string ConfigFile { get; }
+    public string? ConfigFile { get; }
 
     [Option(CommandOptionType.SingleValue, ShortName = "v", LongName = "verbosity",
         Description = "Output verbosity. Options are Trace, Debug, Information, Warning, Error, Critical, None.")]
     // TODO: Change this type to be the Enum once Nate McMaster ships v2.2.0 of his library.
-    public string LogLevelOption { get; }
+    public string? LogLevelOption { get; }
 
     private static Task<int> Main(string[] args)
     {
@@ -60,7 +78,7 @@ public class Program
         var frameworkVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
 
         // This reflects the version of the nuget package.
-        string version = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).ProductVersion;
+        string version = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).ProductVersion ?? "unknown";
 
         if (!Enum.TryParse(LogLevelOption, true, out LogLevel logLevel)) logLevel = LogLevel.Information;
 
@@ -72,45 +90,28 @@ public class Program
         }
 
         FileInfo configFile = LocateConfigFile(ConfigFile);
-
-        CoalesceConfiguration config;
-
-        using (var reader = new StreamReader(configFile.FullName))
-        using (var jsonReader = new JsonTextReader(reader))
-        {
-            var serializer = new JsonSerializer();
-            config = serializer.Deserialize<CoalesceConfiguration>(jsonReader);
-        }
-
+        CoalesceConfiguration config = LoadConfiguration(configFile.FullName);
         config.DryRun = DryRun;
 
         // Must go AFTER we load in the config file, since if the config file was a relative path, changing this ruins that.
-        Directory.SetCurrentDirectory(configFile.DirectoryName);
+        Directory.SetCurrentDirectory(configFile.DirectoryName!);
 
         if (logLevel <= LogLevel.Information)
         {
             Console.WriteLine($"Working in '{Directory.GetCurrentDirectory()}', using '{Path.GetFileName(configFile.FullName)}'");
         }
 
-        // TODO: dynamic resolution of the specific generator.
-        // For now, we hard-reference all of them and then try and match one of them.
-        // This may ultimately be the best approach in the long run, since it lets us easily do partial matching as below:
-        var rootGeneratorName = config.RootGenerator ?? "Vue";
-        var rootGenerators = new[]
-        {
-            typeof(CodeGeneration.Vue.Generators.VueSuite),
-        };
-
-        Type rootGenerator =
-               rootGenerators.FirstOrDefault(t => t.FullName == rootGeneratorName)
-            ?? rootGenerators.FirstOrDefault(t => t.Name == rootGeneratorName)
-            ?? rootGenerators.SingleOrDefault(t => t.FullName.Contains(rootGeneratorName));
-
+        var rootGenerator = ResolveRootGenerator(config.RootGenerator);
         if (rootGenerator == null)
         {
-            Console.Error.WriteLine($"Couldn't find a root generator that matches {rootGeneratorName}");
-            Console.Error.WriteLine($"Valid root generators are: {string.Join(",", rootGenerators.Select(g => g.FullName))}");
+            Console.Error.WriteLine($"Couldn't find a root generator that matches {config.RootGenerator ?? "Vue"}");
+            Console.Error.WriteLine($"Valid root generators are: {string.Join(",", GetRootGenerators().Select(g => g.FullName))}");
             return -1;
+        }
+
+        if (!string.IsNullOrWhiteSpace(EmitCSharpSourceGenOutput))
+        {
+            return await EmitCSharpSourceGenOutputsAsync(config, logLevel, rootGenerator);
         }
 
         var executor = new GenerationExecutor(config, logLevel);
@@ -145,6 +146,139 @@ public class Program
         return 0;
     }
 
+    private static CoalesceConfiguration LoadConfiguration(string configFilePath)
+    {
+        using var reader = new StreamReader(configFilePath);
+        using var jsonReader = new JsonTextReader(reader);
+        var serializer = new JsonSerializer();
+        return serializer.Deserialize<CoalesceConfiguration>(jsonReader)!;
+    }
+
+    private static Type? ResolveRootGenerator(string? rootGeneratorName)
+    {
+        var effectiveRootGeneratorName = rootGeneratorName ?? "Vue";
+        var rootGenerators = GetRootGenerators();
+
+        return rootGenerators.FirstOrDefault(t => t.FullName == effectiveRootGeneratorName)
+            ?? rootGenerators.FirstOrDefault(t => t.Name == effectiveRootGeneratorName)
+            ?? rootGenerators.SingleOrDefault(t => t.FullName!.Contains(effectiveRootGeneratorName, StringComparison.Ordinal));
+    }
+
+    private static Type[] GetRootGenerators()
+        =>
+        [
+            typeof(CodeGeneration.Vue.Generators.VueSuite),
+        ];
+
+    private async Task<int> EmitCSharpSourceGenOutputsAsync(CoalesceConfiguration config, LogLevel logLevel, Type rootGenerator)
+    {
+        var originalTargetDirectory = config.Output.TargetDirectory;
+        var originalDryRun = config.DryRun;
+        string tempOutputDirectory = Path.Combine(Path.GetTempPath(), $"coalesce-sourcegen-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(tempOutputDirectory);
+            config.Output.TargetDirectory = tempOutputDirectory;
+            config.DryRun = false;
+
+            EnsureGeneratorDisabled(config, disabled: true, ScriptsGeneratorName, ScriptsGeneratorFullName);
+            EnsureGeneratorDisabled(config, disabled: true, KernelPluginsGeneratorName, KernelPluginsGeneratorFullName);
+            EnsureGeneratorDisabled(config, disabled: false, ModelsGeneratorName, ModelsGeneratorFullName);
+            EnsureGeneratorDisabled(config, disabled: false, ControllersGeneratorName, ControllersGeneratorFullName);
+
+            var executor = new GenerationExecutor(config, logLevel);
+            try
+            {
+                await executor.GenerateAsync(rootGenerator);
+            }
+            catch (CoalesceModelException e)
+            {
+                executor.Logger.LogError(e.Message);
+                return -1;
+            }
+            catch (ProjectAnalysisException e)
+            {
+                executor.Logger.LogError(e.Message);
+                return -1;
+            }
+            catch (Exception e)
+            {
+                executor.Logger.LogError(e.ToString());
+                return -1;
+            }
+
+            var outputs = CaptureGeneratedCSharpOutputs(tempOutputDirectory);
+            var outputDirectory = Path.GetDirectoryName(Path.GetFullPath(EmitCSharpSourceGenOutput!));
+            if (!string.IsNullOrWhiteSpace(outputDirectory))
+            {
+                Directory.CreateDirectory(outputDirectory);
+            }
+
+            await File.WriteAllTextAsync(
+                Path.GetFullPath(EmitCSharpSourceGenOutput!),
+                JsonConvert.SerializeObject(outputs, Formatting.None));
+
+            return 0;
+        }
+        finally
+        {
+            config.Output.TargetDirectory = originalTargetDirectory;
+            config.DryRun = originalDryRun;
+
+            try
+            {
+                if (Directory.Exists(tempOutputDirectory))
+                {
+                    Directory.Delete(tempOutputDirectory, recursive: true);
+                }
+            }
+            catch
+            {
+                // Best effort cleanup only.
+            }
+        }
+    }
+
+    private static Dictionary<string, string> CaptureGeneratedCSharpOutputs(string tempOutputDirectory)
+    {
+        var outputs = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var relativeDirectory in new[]
+                 {
+                     Path.Combine("Models", "Generated"),
+                     Path.Combine("Api", "Generated"),
+                 })
+        {
+            var fullDirectory = Path.Combine(tempOutputDirectory, relativeDirectory);
+            if (!Directory.Exists(fullDirectory))
+            {
+                continue;
+            }
+
+            foreach (var filePath in Directory.GetFiles(fullDirectory, "*.g.cs", SearchOption.AllDirectories))
+            {
+                var relativePath = Path.GetRelativePath(tempOutputDirectory, filePath).Replace('\\', '/');
+                outputs[relativePath] = File.ReadAllText(filePath);
+            }
+        }
+
+        return outputs;
+    }
+
+    private static void EnsureGeneratorDisabled(CoalesceConfiguration config, bool disabled, params string[] generatorNames)
+    {
+        foreach (var generatorName in generatorNames.Where(name => !string.IsNullOrWhiteSpace(name)))
+        {
+            if (!config.GeneratorConfig.TryGetValue(generatorName, out var generatorConfig))
+            {
+                generatorConfig = new JObject();
+                config.GeneratorConfig[generatorName] = generatorConfig;
+            }
+
+            generatorConfig[Generator.DisabledJsonPropertyName] = disabled;
+        }
+    }
 
     private static void WaitForDebugger()
     {
@@ -163,9 +297,9 @@ public class Program
         }
     }
 
-    private static FileInfo LocateConfigFile(string explicitLocation)
+    private static FileInfo LocateConfigFile(string? explicitLocation)
     {
-        FileInfo file = null;
+        FileInfo? file = null;
         if (!string.IsNullOrWhiteSpace(explicitLocation))
         {
             file = new FileInfo(explicitLocation);

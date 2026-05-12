@@ -27,3 +27,5 @@ COA1002 | Style | Hidden | Marks the unnecessary parts of ItemResult constructor
 COA2001 | Security | Warning | Data sources that perform authorization checks should ensure their served type has a default data source to prevent security bypasses. Without a default data source, clients can directly access the served type without the authorization logic.
 COALESCEGC001 | Coalesce.GeneratedContracts | Error | Generated contract shape references a missing property.
 COALESCEGC002 | Coalesce.GeneratedContracts | Error | Generated contract shape is declared more than once.
+COALESCESG001 | Coalesce.SourceGeneration | Error | Coalesce in-memory C# generation failed.
+COALESCESG002 | Coalesce.SourceGeneration | Error | Coalesce generated C# files are still included in the compilation.
