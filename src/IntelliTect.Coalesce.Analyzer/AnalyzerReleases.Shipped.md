@@ -25,3 +25,5 @@ COA0201 | Usage | Info | IFile parameters on Coalesce-exposed methods should spe
 COA1001 | Style | Info | ItemResult and ItemResult<T> constructors can often be replaced with implicit conversions from boolean, string, and object values. This provides cleaner, more readable code while maintaining the same functionality.
 COA1002 | Style | Hidden | Marks the unnecessary parts of ItemResult constructor calls that can be removed when using implicit conversions. This diagnostic helps IDE syntax highlighting identify which portions of the code will be simplified by the COA1001 code fix.
 COA2001 | Security | Warning | Data sources that perform authorization checks should ensure their served type has a default data source to prevent security bypasses. Without a default data source, clients can directly access the served type without the authorization logic.
+COALESCEGC001 | Coalesce.GeneratedContracts | Error | Generated contract shape references a missing property.
+COALESCEGC002 | Coalesce.GeneratedContracts | Error | Generated contract shape is declared more than once.
