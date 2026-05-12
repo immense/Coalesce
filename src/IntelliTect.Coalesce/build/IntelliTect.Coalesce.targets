@@ -1,0 +1,49 @@
+<Project>
+  <PropertyGroup>
+    <CoalesceGeneratedCSharpTaskAssembly Condition="'$(CoalesceGeneratedCSharpTaskAssembly)' == ''">$(MSBuildThisFileDirectory)..\tasks\net8.0\IntelliTect.Coalesce.CodeGeneration.Vue.dll</CoalesceGeneratedCSharpTaskAssembly>
+    <CoalesceGeneratedSourceSnapshotPath Condition="'$(CoalesceGeneratedSourceSnapshotPath)' == ''">$(IntermediateOutputPath)coalesce-generated-csharp.json</CoalesceGeneratedSourceSnapshotPath>
+  </PropertyGroup>
+
+  <UsingTask TaskName="ExportCoalesceGeneratedCSharpTask"
+             AssemblyFile="$(CoalesceGeneratedCSharpTaskAssembly)" />
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="CoalesceGeneratedSourceSnapshotPath" />
+  </ItemGroup>
+
+  <Target Name="Coalesce_ExportGeneratedCSharp"
+          DependsOnTargets="ResolveProjectReferences;ResolveReferences"
+          BeforeTargets="CoreCompile"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <ExportCoalesceGeneratedCSharpTask
+      ProjectFilePath="$(MSBuildProjectFullPath)"
+      ProjectDirectory="$(MSBuildProjectDirectory)"
+      ConfigPath="$(CoalesceConfigPath)"
+      SnapshotPath="$(CoalesceGeneratedSourceSnapshotPath)"
+      ProjectName="$(MSBuildProjectName)"
+      RootNamespace="$(RootNamespace)"
+      AssemblyName="$(AssemblyName)"
+      Configuration="$(Configuration)"
+      TargetFramework="$(TargetFramework)"
+      LangVersion="$(LangVersion)"
+      Nullable="$(Nullable)"
+      DefineConstants="$(DefineConstants)"
+      OutputType="$(OutputType)"
+      Platform="$(Platform)"
+      TargetPath="$(TargetPath)"
+      TargetDirectory="$(TargetDir)"
+      CompileItems="@(Compile)"
+      ResolvedReferences="@(ReferencePath)"
+      ProjectReferences="@(ProjectReference)"
+      EmbeddedItems="@(EmbeddedResource)" />
+  </Target>
+
+  <Target Name="Coalesce_IncludeGeneratedCSharpSnapshot"
+          DependsOnTargets="Coalesce_ExportGeneratedCSharp"
+          BeforeTargets="CoreCompile"
+          Condition="Exists('$(CoalesceGeneratedSourceSnapshotPath)')">
+    <ItemGroup>
+      <AdditionalFiles Include="$(CoalesceGeneratedSourceSnapshotPath)" />
+    </ItemGroup>
+  </Target>
+</Project>

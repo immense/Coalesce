@@ -1,0 +1,4 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)..\build\IntelliTect.Coalesce.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\build\IntelliTect.Coalesce.targets')" />
+</Project>

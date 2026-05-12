@@ -1,6 +1,5 @@
 ﻿#nullable enable
 
-using IntelliTect.Coalesce.Analyzer.SourceGenerators;
 using IntelliTect.Coalesce.DataAnnotations;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;

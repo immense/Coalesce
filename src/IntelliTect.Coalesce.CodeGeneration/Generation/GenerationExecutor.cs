@@ -1,3 +1,5 @@
+#nullable enable
+
 using IntelliTect.Coalesce.CodeGeneration.Analysis;
 using IntelliTect.Coalesce.CodeGeneration.Analysis.Base;
 using IntelliTect.Coalesce.CodeGeneration.Analysis.Roslyn;
@@ -21,11 +23,22 @@ namespace IntelliTect.Coalesce.CodeGeneration.Generation;
 public class GenerationExecutor
 {
     private readonly LogLevel logLevel;
+    private readonly ProjectContext? dataProjectOverride;
+    private readonly ProjectContext? webProjectOverride;
+    private readonly bool throwOnFailure;
 
-    public GenerationExecutor(CoalesceConfiguration config, LogLevel logLevel)
+    public GenerationExecutor(
+        CoalesceConfiguration config,
+        LogLevel logLevel,
+        ProjectContext? dataProjectOverride = null,
+        ProjectContext? webProjectOverride = null,
+        bool throwOnFailure = false)
     {
         Config = config;
         this.logLevel = logLevel;
+        this.dataProjectOverride = dataProjectOverride;
+        this.webProjectOverride = webProjectOverride;
+        this.throwOnFailure = throwOnFailure;
 
         var services = new ServiceCollection();
         services.AddLogging(builder => builder
@@ -44,7 +57,7 @@ public class GenerationExecutor
     }
 
     public CoalesceConfiguration Config { get; }
-    public ILogger<GenerationExecutor> Logger { get; private set; }
+    public ILogger<GenerationExecutor> Logger { get; private set; } = null!;
     public ServiceProvider ServiceProvider { get; private set; }
 
     public GenerationContext GenerationContext => ServiceProvider.GetRequiredService<GenerationContext>();
@@ -68,7 +81,7 @@ public class GenerationExecutor
             throw new ArgumentException("type is not an IRootGenerator");
         }
 
-        return ActivatorUtilities.CreateInstance(ServiceProvider, rootGenerator) as IRootGenerator;
+        return (IRootGenerator)ActivatorUtilities.CreateInstance(ServiceProvider, rootGenerator);
     }
 
     public async Task GenerateAsync(Type rootGenerator)
@@ -105,16 +118,14 @@ public class GenerationExecutor
         var types = ProjectTypeDiscovery.GetAllTypes(genContext);
 
         Logger.LogInformation("Checking Diagnostics");
-        bool die = false;
-        foreach (var diag in ProjectTypeDiscovery.GetDiagnostics(genContext))
+        var projectDiagnostics = ProjectTypeDiscovery.GetDiagnostics(genContext).ToList();
+        foreach (var diag in projectDiagnostics)
         {
             Logger.LogError(diag);
-            die = true;
         }
-        if (die)
+        if (projectDiagnostics.Count != 0)
         {
-            Environment.Exit(-1);
-            return;
+            FailGeneration(string.Join(Environment.NewLine, projectDiagnostics));
         }
 
         Logger.LogInformation($"Analyzing {types.Count()} Types");
@@ -147,8 +158,7 @@ public class GenerationExecutor
         if (issues.Any(i => !i.IsWarning))
         {
             Logger.LogError("Model validation failed. Exiting.");
-            Environment.Exit(-1);
-            return;
+            FailGeneration("Model validation failed.");
         }
 
         string outputPath = genContext.WebProject.ProjectPath;
@@ -178,12 +188,22 @@ public class GenerationExecutor
 
     private string GetCodeGenVersion()
     {
-        var generatorAssembly = Assembly.GetEntryAssembly();
-        return FileVersionInfo
+        var generatorAssembly = typeof(GenerationExecutor).Assembly;
+        return (FileVersionInfo
             .GetVersionInfo(generatorAssembly.Location)
-            .ProductVersion
+            .ProductVersion ?? "unknown")
             // SourceLink will append the commit hash to the version, using '+' as a delimiter.
             .Split('+').First();
+    }
+
+    private void FailGeneration(string message)
+    {
+        if (throwOnFailure)
+        {
+            throw new InvalidOperationException(message);
+        }
+
+        Environment.Exit(-1);
     }
 
     private async Task LoadProjects(ILogger<GenerationExecutor> logger, GenerationContext genContext)
@@ -196,14 +216,14 @@ public class GenerationExecutor
         // it seems that more and more often, the projects step on 
         // one another when they're building and end up failing due
         // to file contention of some form or another.
-        genContext.DataProject = await TryLoadProject(Config.DataProject);
+        genContext.DataProject = dataProjectOverride ?? await TryLoadProject(Config.DataProject);
 
         // Don't build references of the web project (which always includes the data project).
         // We don't need of those build outputs (we ingest the data project source code directly),
         // so doing so would be a waste of time (and is indeed a LARGE waste of time on large projects,
         // especially those with many EF migrations).
         Config.WebProject.BuildProjectReferences = false;
-        genContext.WebProject = await TryLoadProject(Config.WebProject);
+        genContext.WebProject = webProjectOverride ?? await TryLoadProject(Config.WebProject);
 
         async Task<ProjectContext> TryLoadProject(ProjectConfiguration config)
         {
@@ -328,8 +348,7 @@ public class GenerationExecutor
                 }
             }
 
-            // Not possible to reach, but need to satisfy the compiler.
-            return null;
+            throw new InvalidOperationException($"Unable to analyze project '{config.ProjectFile}'.");
         }
     }
 }

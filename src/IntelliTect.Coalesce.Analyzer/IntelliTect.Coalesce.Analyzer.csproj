@@ -9,9 +9,8 @@
 
     <!-- RS1038: This compiler extension should not be implemented in an assembly containing a
     reference to Microsoft.CodeAnalysis.Workspaces -->
-    <!-- RS1035: This source generator intentionally shells out to the Coalesce CLI and reads generated
-         source capture files while we migrate the existing codegen pipeline behind an incremental generator. -->
-    <!-- (don't have the time to fix this right now) -->
+    <!-- RS1035: SourceGenerator.Foundations intentionally uses debugger/environment APIs to improve
+         source generator diagnostics and dependency loading. -->
     <NoWarn>$(NoWarn);RS1038;RS1035</NoWarn>
 
     <!-- Disable symbols because this project doesn't produce any since IncludeBuildOutput is false -->
@@ -50,8 +49,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" VersionOverride="5.0.0" />
+    <PackageReference Include="SourceGenerator.Foundations" PrivateAssets="all" />
     <PackageReference Include="System.Text.Json" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>IntelliTect.Coalesce.Analyzer.Tests</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
   <ItemGroup>

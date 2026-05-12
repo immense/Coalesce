@@ -1,3 +1,5 @@
+#nullable enable
+
 using IntelliTect.Coalesce.CodeGeneration.Analysis.Base;
 using IntelliTect.Coalesce.CodeGeneration.Configuration;
 using IntelliTect.Coalesce.CodeGeneration.Analysis.MsBuild;
@@ -17,19 +19,31 @@ public class RoslynProjectContextFactory : IProjectContextFactory
 
     public ProjectContext CreateContext(ProjectConfiguration projectConfig, bool restore = false)
     {
-        var context = new RoslynProjectContext(projectConfig);
+        var tempContext = new RoslynProjectContext(projectConfig);
 
-        var builder = new MsBuildProjectContextBuilder(Logger, context);
+        var builder = new MsBuildProjectContextBuilder(Logger, tempContext);
         if (restore)
         {
             builder = builder.RestoreProjectPackages();
         }
 
-        var msbContext = context.MsBuildProjectContext = builder.BuildProjectContext();
+        var msbContext = builder.BuildProjectContext();
+        return CreateContext(projectConfig, msbContext, Logger);
+    }
 
-        if (!LanguageVersionFacts.TryParse(msbContext.LangVersion, out var langVersion))
+    public static RoslynProjectContext CreateContext(
+        ProjectConfiguration projectConfig,
+        MsBuildProjectContext msBuildProjectContext,
+        ILogger? logger = null)
+    {
+        var context = new RoslynProjectContext(projectConfig)
         {
-            Logger.LogWarning($"Unknown or unsupported C# Language version '{msbContext.LangVersion}' specified by {msbContext.ProjectName}. Code generation may malfunction.");
+            MsBuildProjectContext = msBuildProjectContext,
+        };
+
+        if (!LanguageVersionFacts.TryParse(msBuildProjectContext.LangVersion, out var langVersion))
+        {
+            logger?.LogWarning($"Unknown or unsupported C# Language version '{msBuildProjectContext.LangVersion}' specified by {msBuildProjectContext.ProjectName}. Code generation may malfunction.");
         }
         else
         {
