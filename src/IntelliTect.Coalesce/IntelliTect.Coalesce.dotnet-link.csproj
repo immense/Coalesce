@@ -47,13 +47,18 @@
       Pack="true"
       PackagePath="tasks\net8.0"
       Visible="false" />
+    <None
+      Include="..\IntelliTect.Coalesce.CodeGeneration.Vue\bin\$(Configuration)\net8.0\*.deps.json"
+      Pack="true"
+      PackagePath="tasks\net8.0"
+      Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Application\SecurityOverview.html" />
   </ItemGroup>
 
-  <Target Name="BuildCoalesceSourceGenerationTaskAssembly" BeforeTargets="Pack">
+  <Target Name="BuildCoalesceSourceGenerationTaskAssembly" BeforeTargets="Pack" Condition="'$(NoBuild)' != 'true'">
     <MSBuild
       Projects="..\IntelliTect.Coalesce.CodeGeneration.Vue\IntelliTect.Coalesce.CodeGeneration.Vue.csproj"
       Targets="Build"
