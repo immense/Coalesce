@@ -35,7 +35,7 @@ internal static class GeneratedContractCompilationAugmentor
         var generatedTrees = new List<SyntaxTree>();
         var emittedTypes = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var sourceType in GetDeclaredTypes(compilation))
+        foreach (var sourceType in GetCandidateTypes(compilation))
         {
             var shapes = GeneratedContracts.GetShapes(sourceType)
                 .Where(shape => ShouldAugmentShape(sourceType, shape))
@@ -110,10 +110,33 @@ internal static class GeneratedContractCompilationAugmentor
         return assemblyName;
     }
 
-    private static IEnumerable<INamedTypeSymbol> GetDeclaredTypes(Compilation compilation)
+    private static IEnumerable<INamedTypeSymbol> GetCandidateTypes(Compilation compilation)
     {
         var discovered = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
 
+        foreach (var sourceType in GetDeclaredTypes(compilation))
+        {
+            discovered.Add(sourceType);
+        }
+
+        foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            if (!ShouldInspectAssembly(assembly))
+            {
+                continue;
+            }
+
+            foreach (var symbol in GetNamedTypes(assembly.GlobalNamespace))
+            {
+                discovered.Add(symbol);
+            }
+        }
+
+        return discovered;
+    }
+
+    private static IEnumerable<INamedTypeSymbol> GetDeclaredTypes(Compilation compilation)
+    {
         foreach (var tree in compilation.SyntaxTrees)
         {
             var semanticModel = compilation.GetSemanticModel(tree);
@@ -123,11 +146,51 @@ internal static class GeneratedContractCompilationAugmentor
                     symbol.ContainingAssembly is not null &&
                     SymbolEqualityComparer.Default.Equals(symbol.ContainingAssembly, compilation.Assembly))
                 {
-                    discovered.Add(symbol);
+                    yield return symbol;
                 }
             }
         }
+    }
 
-        return discovered;
+    private static bool ShouldInspectAssembly(IAssemblySymbol assembly)
+        => assembly.Name != "IntelliTect.Coalesce" &&
+           assembly.Modules.Any(module =>
+               module.ReferencedAssemblySymbols.Any(reference => reference.Name == "IntelliTect.Coalesce"));
+
+    private static IEnumerable<INamedTypeSymbol> GetNamedTypes(INamespaceSymbol @namespace)
+    {
+        foreach (var member in @namespace.GetMembers())
+        {
+            foreach (var type in GetNamedTypes(member))
+            {
+                yield return type;
+            }
+        }
+    }
+
+    private static IEnumerable<INamedTypeSymbol> GetNamedTypes(INamespaceOrTypeSymbol symbol)
+    {
+        switch (symbol)
+        {
+            case INamespaceSymbol @namespace:
+                foreach (var member in @namespace.GetMembers())
+                {
+                    foreach (var type in GetNamedTypes(member))
+                    {
+                        yield return type;
+                    }
+                }
+                break;
+            case INamedTypeSymbol type:
+                yield return type;
+                foreach (var nestedType in type.GetTypeMembers())
+                {
+                    foreach (var discovered in GetNamedTypes(nestedType))
+                    {
+                        yield return discovered;
+                    }
+                }
+                break;
+        }
     }
 }
