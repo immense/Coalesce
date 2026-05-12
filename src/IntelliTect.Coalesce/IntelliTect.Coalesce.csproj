@@ -14,7 +14,10 @@
 
   <ItemGroup>
     <ProjectReference
-      Include="..\IntelliTect.Coalesce.Analyzer\IntelliTect.Coalesce.Analyzer.csproj" />
+      Include="..\IntelliTect.Coalesce.Analyzer\IntelliTect.Coalesce.Analyzer.csproj"
+      PrivateAssets="all"
+      ReferenceOutputAssembly="false"
+      OutputItemType="Analyzer" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +34,11 @@
   <ItemGroup>
     <None Remove="Application\SecurityOverview.html" />
     <None Include="../../README.md" Pack="true" PackagePath="\" />
+    <None
+      Include="..\IntelliTect.Coalesce.Analyzer\bin\$(Configuration)\netstandard2.0\IntelliTect.Coalesce.Analyzer.dll"
+      Pack="true"
+      PackagePath="analyzers/dotnet/cs"
+      Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
