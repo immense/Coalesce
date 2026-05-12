@@ -218,6 +218,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Members)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.ExcludedMembers)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Implements)),
+            GetTypeArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.IncludedPropertyAttributes)),
             GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.SettableProperties)),
             GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)));
     }
@@ -247,6 +248,24 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             return argument.Value.Values
                 .Where(value => value.Value is string)
                 .Select(value => (string)value.Value!)
+                .ToArray();
+        }
+
+        return [];
+    }
+
+    private static IReadOnlyList<string> GetTypeArray(AttributeData attribute, string name)
+    {
+        foreach (var argument in attribute.NamedArguments)
+        {
+            if (argument.Key != name || argument.Value.Kind != TypedConstantKind.Array)
+            {
+                continue;
+            }
+
+            return argument.Value.Values
+                .Where(value => value.Kind == TypedConstantKind.Type && value.Value is ITypeSymbol)
+                .Select(value => ((ITypeSymbol)value.Value!).ToDisplayString())
                 .ToArray();
         }
 
@@ -305,7 +324,8 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
                 property,
                 ShouldForceNullable(property, shape),
                 HasAttribute(property, NonNullableAttributeMetadataName, shape.ShapeName),
-                GetDtoSource(property)));
+                GetDtoSource(property),
+                GetIncludedPropertyAttributes(property, shape)));
         }
 
         return properties;
@@ -407,6 +427,20 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             path,
             GetString(attribute, nameof(DtoSourceAttribute.OrderBy)),
             GetInt(attribute, nameof(DtoSourceAttribute.OrderByDirection)));
+    }
+
+    private static IReadOnlyList<AttributeData> GetIncludedPropertyAttributes(IPropertySymbol property, ContractShape shape)
+    {
+        if (shape.IncludedPropertyAttributes.Count == 0)
+        {
+            return [];
+        }
+
+        var includedAttributeTypes = new HashSet<string>(shape.IncludedPropertyAttributes, StringComparer.Ordinal);
+        return property.GetAttributes()
+            .Where(attribute => attribute.AttributeClass is not null)
+            .Where(attribute => includedAttributeTypes.Contains(attribute.AttributeClass!.ToDisplayString()))
+            .ToArray();
     }
 
     private static bool HasAttribute(IPropertySymbol property, string attributeMetadataName, string shapeName)
@@ -523,6 +557,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         public static string[] Members { get; set; } = [];
         public static string[] ExcludedMembers { get; set; } = [];
         public static string[] Implements { get; set; } = [];
+        public static Type[] IncludedPropertyAttributes { get; set; } = [];
         public static bool SettableProperties { get; set; }
         public static int NullabilityTransform { get; set; }
     }
@@ -537,6 +572,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         IReadOnlyList<string> Members,
         IReadOnlyList<string> ExcludedMembers,
         IReadOnlyList<string> Implements,
+        IReadOnlyList<string> IncludedPropertyAttributes,
         bool SettableProperties,
         int NullabilityTransform);
 
@@ -550,7 +586,8 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         IPropertySymbol Property,
         bool ForceNullable,
         bool ForceNonNullable,
-        DtoSourceMetadata? DtoSource);
+        DtoSourceMetadata? DtoSource,
+        IReadOnlyList<AttributeData> IncludedPropertyAttributes);
 
     internal sealed record DtoSourceMetadata(
         string Path,
@@ -648,9 +685,9 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
         GeneratedContracts.GeneratedContractFileModel model,
         GeneratedContracts.ContractPropertyModel property)
     {
-        if (property.DtoSource is { } dtoSource)
+        foreach (var attributeLine in BuildPropertyAttributeLines(property))
         {
-            yield return BuildDtoSourceAttribute(dtoSource);
+            yield return attributeLine;
         }
 
         var typeName = GetTypeName(property);
@@ -664,6 +701,19 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
         var required = NeedsRequiredKeyword(property) ? "required " : string.Empty;
         var initializer = HasCollectionInitializer(property) ? " = [];" : string.Empty;
         yield return $"public {required}{typeName} {property.Name} {{ get; set; }}{initializer}";
+    }
+
+    private static IEnumerable<string> BuildPropertyAttributeLines(GeneratedContracts.ContractPropertyModel property)
+    {
+        if (property.DtoSource is { } dtoSource)
+        {
+            yield return BuildDtoSourceAttribute(dtoSource);
+        }
+
+        foreach (var attribute in property.IncludedPropertyAttributes)
+        {
+            yield return BuildAttribute(attribute);
+        }
     }
 
     private static string BuildDtoSourceAttribute(GeneratedContracts.DtoSourceMetadata dtoSource)
@@ -688,6 +738,91 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
 
         return $"[global::IntelliTect.Coalesce.DataAnnotations.DtoSource({string.Join(", ", args)})]";
     }
+
+    private static string BuildAttribute(AttributeData attribute)
+    {
+        var typeName = attribute.AttributeClass?.ToDisplayString(TypeDisplayFormat)
+            ?? throw new InvalidOperationException("Unable to resolve generated contract attribute type.");
+
+        var arguments = attribute.ConstructorArguments
+            .Select(FormatAttributeArgument)
+            .Concat(attribute.NamedArguments.Select(argument => $"{argument.Key} = {FormatAttributeArgument(argument.Value)}"))
+            .ToArray();
+
+        return arguments.Length == 0
+            ? $"[{typeName}]"
+            : $"[{typeName}({string.Join(", ", arguments)})]";
+    }
+
+    private static string FormatAttributeArgument(TypedConstant value)
+    {
+        if (value.IsNull)
+        {
+            return "null";
+        }
+
+        if (value.Kind == TypedConstantKind.Array)
+        {
+            var elementTypeName = value.Type is IArrayTypeSymbol arrayType
+                ? arrayType.ElementType.ToDisplayString(TypeDisplayFormat)
+                : "object";
+
+            return $"new {elementTypeName}[] {{ {string.Join(", ", value.Values.Select(FormatAttributeArgument))} }}";
+        }
+
+        if (value.Kind == TypedConstantKind.Type && value.Value is ITypeSymbol typeSymbol)
+        {
+            return $"typeof({typeSymbol.ToDisplayString(TypeDisplayFormat)})";
+        }
+
+        if (value.Type?.TypeKind == TypeKind.Enum)
+        {
+            return FormatEnumAttributeArgument(value);
+        }
+
+        return FormatPrimitiveAttributeArgument(value.Value!);
+    }
+
+    private static string FormatEnumAttributeArgument(TypedConstant value)
+    {
+        if (value.Type is not INamedTypeSymbol enumType)
+        {
+            return FormatPrimitiveAttributeArgument(value.Value!);
+        }
+
+        var namedMember = enumType.GetMembers()
+            .OfType<IFieldSymbol>()
+            .FirstOrDefault(field => field.HasConstantValue && Equals(field.ConstantValue, value.Value));
+
+        if (namedMember is not null)
+        {
+            return $"{enumType.ToDisplayString(TypeDisplayFormat)}.{namedMember.Name}";
+        }
+
+        return $"({enumType.ToDisplayString(TypeDisplayFormat)}){FormatPrimitiveAttributeArgument(value.Value!)}";
+    }
+
+    private static string FormatPrimitiveAttributeArgument(object value)
+        => value switch
+        {
+            string stringValue => SymbolDisplay.FormatLiteral(stringValue, quote: true),
+            char charValue => SymbolDisplay.FormatLiteral(charValue, quote: true),
+            bool boolValue => boolValue ? "true" : "false",
+            float floatValue when float.IsNaN(floatValue) => "global::System.Single.NaN",
+            float floatValue when float.IsPositiveInfinity(floatValue) => "global::System.Single.PositiveInfinity",
+            float floatValue when float.IsNegativeInfinity(floatValue) => "global::System.Single.NegativeInfinity",
+            float floatValue => floatValue.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "F",
+            double doubleValue when double.IsNaN(doubleValue) => "global::System.Double.NaN",
+            double doubleValue when double.IsPositiveInfinity(doubleValue) => "global::System.Double.PositiveInfinity",
+            double doubleValue when double.IsNegativeInfinity(doubleValue) => "global::System.Double.NegativeInfinity",
+            double doubleValue => doubleValue.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "D",
+            decimal decimalValue => decimalValue.ToString(System.Globalization.CultureInfo.InvariantCulture) + "M",
+            long longValue => longValue.ToString(System.Globalization.CultureInfo.InvariantCulture) + "L",
+            ulong ulongValue => ulongValue.ToString(System.Globalization.CultureInfo.InvariantCulture) + "UL",
+            uint uintValue => uintValue.ToString(System.Globalization.CultureInfo.InvariantCulture) + "U",
+            _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                ?? throw new InvalidOperationException($"Unable to format generated contract attribute argument '{value}'.")
+        };
 
     private static string GetTypeName(GeneratedContracts.ContractPropertyModel property)
     {

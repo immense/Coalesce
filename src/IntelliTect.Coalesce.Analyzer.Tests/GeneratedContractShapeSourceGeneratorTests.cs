@@ -103,6 +103,66 @@ public class GeneratedContractShapeSourceGeneratorTests
         await Assert.That(updatedCompilation.SyntaxTrees.Any(tree => tree.FilePath.Contains("Demo.Contracts.ReferencedPersonContract.g.cs", StringComparison.Ordinal))).IsTrue();
     }
 
+    [Test]
+    public async Task PropagatesSelectedPropertyAttributesToGeneratedContracts()
+    {
+        var compilation = CreateCompilation(
+            "GeneratedContractConsumer",
+            """
+            #nullable enable
+            using System;
+            using IntelliTect.Coalesce.DataAnnotations;
+
+            namespace Demo;
+
+            [AttributeUsage(AttributeTargets.Property)]
+            public sealed class CopyMeAttribute : Attribute
+            {
+                public CopyMeAttribute(string label)
+                {
+                    Label = label;
+                }
+
+                public string Label { get; }
+                public bool Flag { get; init; }
+            }
+
+            [GeneratedContractShape(
+                "same-project",
+                GeneratedContractOutputKind.Class,
+                "GeneratedContractConsumer",
+                "Demo.Contracts",
+                "AttributedContract",
+                Members = [nameof(Name)],
+                IncludedPropertyAttributes = [typeof(CopyMeAttribute)])]
+            public class PersonSource
+            {
+                [CopyMe("tenant-name", Flag = true)]
+                public string Name { get; set; } = null!;
+            }
+
+            public class Consumer
+            {
+                public Demo.Contracts.AttributedContract Contract { get; set; } = new()
+                {
+                    Name = string.Empty
+                };
+            }
+            """);
+
+        var updatedCompilation = RunGenerator(compilation, out var diagnostics);
+
+        await Assert.That(diagnostics).IsEmpty();
+        await Assert.That(updatedCompilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var generatedTree = updatedCompilation.SyntaxTrees
+            .Single(tree => tree.FilePath.Contains("Demo.Contracts.AttributedContract.g.cs", StringComparison.Ordinal));
+        var generatedText = generatedTree.GetText().ToString();
+
+        await Assert.That(generatedText.Contains("[global::Demo.CopyMeAttribute(\"tenant-name\", Flag = true)]")).IsTrue();
+        await Assert.That(generatedText.Contains("public required string Name { get; set; }")).IsTrue();
+    }
+
     private static CSharpCompilation CreateCompilation(
         string assemblyName,
         string source,

@@ -239,6 +239,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Members)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.ExcludedMembers)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Implements)),
+            GetTypeArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.IncludedPropertyAttributes)),
             GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.SettableProperties)),
             GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)));
     }
@@ -269,7 +270,8 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
                 property,
                 ShouldForceNullable(property, shape),
                 HasAttribute(property, NonNullableAttributeMetadataName, shape.ShapeName),
-                GetDtoSource(property)));
+                GetDtoSource(property),
+                GetIncludedPropertyAttributes(property, shape)));
         }
 
         return properties;
@@ -371,6 +373,20 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             path!,
             GetString(attribute, nameof(DtoSourceAttributePlaceholder.OrderBy)),
             GetInt(attribute, nameof(DtoSourceAttributePlaceholder.OrderByDirection)));
+    }
+
+    private static IReadOnlyList<AttributeData> GetIncludedPropertyAttributes(IPropertySymbol property, ContractShape shape)
+    {
+        if (shape.IncludedPropertyAttributes.Count == 0)
+        {
+            return [];
+        }
+
+        var includedAttributeTypes = new HashSet<string>(shape.IncludedPropertyAttributes, StringComparer.Ordinal);
+        return property.GetAttributes()
+            .Where(attribute => attribute.AttributeClass is not null)
+            .Where(attribute => includedAttributeTypes.Contains(attribute.AttributeClass!.ToDisplayString()))
+            .ToImmutableArray();
     }
 
     private static bool HasAttribute(IPropertySymbol property, string attributeMetadataName, string shapeName)
@@ -511,9 +527,9 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
 
         foreach (var property in model.Properties)
         {
-            if (property.DtoSource is { } dtoSource)
+            foreach (var attributeLine in BuildPropertyAttributeLines(property))
             {
-                builder.Append("    ").AppendLine(BuildDtoSourceAttribute(dtoSource));
+                builder.Append("    ").AppendLine(attributeLine);
             }
 
             builder.Append("    ").AppendLine(BuildPropertyLine(model, property));
@@ -521,6 +537,19 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
 
         builder.AppendLine("}");
         return builder.ToString();
+    }
+
+    private static IEnumerable<string> BuildPropertyAttributeLines(ContractPropertyModel property)
+    {
+        if (property.DtoSource is { } dtoSource)
+        {
+            yield return BuildDtoSourceAttribute(dtoSource);
+        }
+
+        foreach (var attribute in property.IncludedPropertyAttributes)
+        {
+            yield return BuildAttribute(attribute);
+        }
     }
 
     private static string BuildPropertyLine(GeneratedContractFileModel model, ContractPropertyModel property)
@@ -559,6 +588,91 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
 
         return $"[global::IntelliTect.Coalesce.DataAnnotations.DtoSource({string.Join(", ", args)})]";
     }
+
+    private static string BuildAttribute(AttributeData attribute)
+    {
+        var typeName = attribute.AttributeClass?.ToDisplayString(TypeDisplayFormat)
+            ?? throw new InvalidOperationException("Unable to resolve generated contract attribute type.");
+
+        var arguments = attribute.ConstructorArguments
+            .Select(FormatAttributeArgument)
+            .Concat(attribute.NamedArguments.Select(argument => $"{argument.Key} = {FormatAttributeArgument(argument.Value)}"))
+            .ToArray();
+
+        return arguments.Length == 0
+            ? $"[{typeName}]"
+            : $"[{typeName}({string.Join(", ", arguments)})]";
+    }
+
+    private static string FormatAttributeArgument(TypedConstant value)
+    {
+        if (value.IsNull)
+        {
+            return "null";
+        }
+
+        if (value.Kind == TypedConstantKind.Array)
+        {
+            var elementTypeName = value.Type is IArrayTypeSymbol arrayType
+                ? arrayType.ElementType.ToDisplayString(TypeDisplayFormat)
+                : "object";
+
+            return $"new {elementTypeName}[] {{ {string.Join(", ", value.Values.Select(FormatAttributeArgument))} }}";
+        }
+
+        if (value.Kind == TypedConstantKind.Type && value.Value is ITypeSymbol typeSymbol)
+        {
+            return $"typeof({typeSymbol.ToDisplayString(TypeDisplayFormat)})";
+        }
+
+        if (value.Type?.TypeKind == TypeKind.Enum)
+        {
+            return FormatEnumAttributeArgument(value);
+        }
+
+        return FormatPrimitiveAttributeArgument(value.Value!);
+    }
+
+    private static string FormatEnumAttributeArgument(TypedConstant value)
+    {
+        if (value.Type is not INamedTypeSymbol enumType)
+        {
+            return FormatPrimitiveAttributeArgument(value.Value!);
+        }
+
+        var namedMember = enumType.GetMembers()
+            .OfType<IFieldSymbol>()
+            .FirstOrDefault(field => field.HasConstantValue && Equals(field.ConstantValue, value.Value));
+
+        if (namedMember is not null)
+        {
+            return $"{enumType.ToDisplayString(TypeDisplayFormat)}.{namedMember.Name}";
+        }
+
+        return $"({enumType.ToDisplayString(TypeDisplayFormat)}){FormatPrimitiveAttributeArgument(value.Value!)}";
+    }
+
+    private static string FormatPrimitiveAttributeArgument(object value)
+        => value switch
+        {
+            string stringValue => SymbolDisplay.FormatLiteral(stringValue, quote: true),
+            char charValue => SymbolDisplay.FormatLiteral(charValue, quote: true),
+            bool boolValue => boolValue ? "true" : "false",
+            float floatValue when float.IsNaN(floatValue) => "global::System.Single.NaN",
+            float floatValue when float.IsPositiveInfinity(floatValue) => "global::System.Single.PositiveInfinity",
+            float floatValue when float.IsNegativeInfinity(floatValue) => "global::System.Single.NegativeInfinity",
+            float floatValue => floatValue.ToString("R", global::System.Globalization.CultureInfo.InvariantCulture) + "F",
+            double doubleValue when double.IsNaN(doubleValue) => "global::System.Double.NaN",
+            double doubleValue when double.IsPositiveInfinity(doubleValue) => "global::System.Double.PositiveInfinity",
+            double doubleValue when double.IsNegativeInfinity(doubleValue) => "global::System.Double.NegativeInfinity",
+            double doubleValue => doubleValue.ToString("R", global::System.Globalization.CultureInfo.InvariantCulture) + "D",
+            decimal decimalValue => decimalValue.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "M",
+            long longValue => longValue.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "L",
+            ulong ulongValue => ulongValue.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "UL",
+            uint uintValue => uintValue.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "U",
+            _ => Convert.ToString(value, global::System.Globalization.CultureInfo.InvariantCulture)
+                ?? throw new InvalidOperationException($"Unable to format generated contract attribute argument '{value}'.")
+        };
 
     private static string GetTypeName(ContractPropertyModel property)
     {
@@ -700,6 +814,24 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         return [];
     }
 
+    private static IReadOnlyList<string> GetTypeArray(AttributeData attribute, string name)
+    {
+        foreach (var argument in attribute.NamedArguments)
+        {
+            if (argument.Key != name || argument.Value.Kind != TypedConstantKind.Array)
+            {
+                continue;
+            }
+
+            return argument.Value.Values
+                .Where(value => value.Kind == TypedConstantKind.Type && value.Value is ITypeSymbol)
+                .Select(value => ((ITypeSymbol)value.Value!).ToDisplayString())
+                .ToImmutableArray();
+        }
+
+        return [];
+    }
+
     private static bool GetBool(AttributeData attribute, string name)
     {
         foreach (var argument in attribute.NamedArguments)
@@ -738,6 +870,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             IReadOnlyList<string> members,
             IReadOnlyList<string> excludedMembers,
             IReadOnlyList<string> implements,
+            IReadOnlyList<string> includedPropertyAttributes,
             bool settableProperties,
             int nullabilityTransform)
         {
@@ -750,6 +883,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             Members = members;
             ExcludedMembers = excludedMembers;
             Implements = implements;
+            IncludedPropertyAttributes = includedPropertyAttributes;
             SettableProperties = settableProperties;
             NullabilityTransform = nullabilityTransform;
         }
@@ -763,6 +897,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         public IReadOnlyList<string> Members { get; }
         public IReadOnlyList<string> ExcludedMembers { get; }
         public IReadOnlyList<string> Implements { get; }
+        public IReadOnlyList<string> IncludedPropertyAttributes { get; }
         public bool SettableProperties { get; }
         public int NullabilityTransform { get; }
     }
@@ -786,13 +921,15 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             IPropertySymbol property,
             bool forceNullable,
             bool forceNonNullable,
-            DtoSourceMetadata? dtoSource)
+            DtoSourceMetadata? dtoSource,
+            IReadOnlyList<AttributeData> includedPropertyAttributes)
         {
             Name = name;
             Property = property;
             ForceNullable = forceNullable;
             ForceNonNullable = forceNonNullable;
             DtoSource = dtoSource;
+            IncludedPropertyAttributes = includedPropertyAttributes;
         }
 
         public string Name { get; }
@@ -800,6 +937,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         public bool ForceNullable { get; }
         public bool ForceNonNullable { get; }
         public DtoSourceMetadata? DtoSource { get; }
+        public IReadOnlyList<AttributeData> IncludedPropertyAttributes { get; }
     }
 
     internal sealed class DtoSourceMetadata
@@ -822,6 +960,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         public static string[] Members { get; set; } = [];
         public static string[] ExcludedMembers { get; set; } = [];
         public static string[] Implements { get; set; } = [];
+        public static Type[] IncludedPropertyAttributes { get; set; } = [];
         public static bool SettableProperties { get; set; }
         public static int NullabilityTransform { get; set; }
     }

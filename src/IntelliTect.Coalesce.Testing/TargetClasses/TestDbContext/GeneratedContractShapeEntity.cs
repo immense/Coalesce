@@ -76,3 +76,29 @@ public class GeneratedContractShapeProjectionSource
         OrderByDirection = DefaultOrderByAttribute.OrderByDirections.Descending)]
     public List<string> OrderedChildren { get; set; } = [];
 }
+
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
+public sealed class GeneratedContractShapeMirrorAttribute : Attribute
+{
+    public GeneratedContractShapeMirrorAttribute(string label)
+    {
+        Label = label;
+    }
+
+    public string Label { get; }
+    public bool Enabled { get; init; }
+}
+
+[GeneratedContractShape(
+    "attribute-spec",
+    GeneratedContractOutputKind.Class,
+    "IntelliTect.Coalesce.Testing",
+    "IntelliTect.Coalesce.Testing.GeneratedContracts",
+    "GeneratedContractShapeAttributeSpec",
+    Members = [nameof(Name)],
+    IncludedPropertyAttributes = [typeof(GeneratedContractShapeMirrorAttribute)])]
+public class GeneratedContractShapeAttributeSource
+{
+    [GeneratedContractShapeMirror("tenant-name", Enabled = true)]
+    public string Name { get; set; } = null!;
+}
