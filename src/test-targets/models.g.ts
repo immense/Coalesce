@@ -535,10 +535,12 @@ export interface ContentViewEntity extends Model<typeof metadata.ContentViewEnti
   contentViewEntityId: number | null
   name: string | null
   description: string | null
+  createdAt: Date | null
   assignedToId: number | null
   assignedTo: PersonSummary | null
   reportedById: number | null
   reportedBy: Person | null
+  tags: ContentViewEntityTagLink[] | null
   neverMapped: string | null
   reportedByCompanyName: string | null
 }
@@ -559,6 +561,61 @@ export class ContentViewEntity {
   /** Instantiate a new ContentViewEntity, optionally basing it on the given data. */
   constructor(data?: Partial<ContentViewEntity> | {[k: string]: any}) {
     Object.assign(this, ContentViewEntity.map(data || {}));
+  }
+}
+
+
+export interface ContentViewEntityTagLink extends Model<typeof metadata.ContentViewEntityTagLink> {
+  contentViewEntityTagLinkId: number | null
+  contentViewEntityId: number | null
+  contentViewEntity: ContentViewEntity | null
+  tagId: number | null
+  tag: ContentViewTag | null
+  id: number | null
+  name: string | null
+}
+export class ContentViewEntityTagLink {
+  
+  /** Mutates the input object and its descendants into a valid ContentViewEntityTagLink implementation. */
+  static convert(data?: Partial<ContentViewEntityTagLink>): ContentViewEntityTagLink {
+    return convertToModel<ContentViewEntityTagLink>(data || {}, metadata.ContentViewEntityTagLink) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid ContentViewEntityTagLink implementation. */
+  static map(data?: Partial<ContentViewEntityTagLink>): ContentViewEntityTagLink {
+    return mapToModel<ContentViewEntityTagLink>(data || {}, metadata.ContentViewEntityTagLink) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.ContentViewEntityTagLink; }
+  
+  /** Instantiate a new ContentViewEntityTagLink, optionally basing it on the given data. */
+  constructor(data?: Partial<ContentViewEntityTagLink> | {[k: string]: any}) {
+    Object.assign(this, ContentViewEntityTagLink.map(data || {}));
+  }
+}
+
+
+export interface ContentViewTag extends Model<typeof metadata.ContentViewTag> {
+  id: number | null
+  name: string | null
+}
+export class ContentViewTag {
+  
+  /** Mutates the input object and its descendants into a valid ContentViewTag implementation. */
+  static convert(data?: Partial<ContentViewTag>): ContentViewTag {
+    return convertToModel<ContentViewTag>(data || {}, metadata.ContentViewTag) 
+  }
+  
+  /** Maps the input object and its descendants to a new, valid ContentViewTag implementation. */
+  static map(data?: Partial<ContentViewTag>): ContentViewTag {
+    return mapToModel<ContentViewTag>(data || {}, metadata.ContentViewTag) 
+  }
+  
+  static [Symbol.hasInstance](x: any) { return x?.$metadata === metadata.ContentViewTag; }
+  
+  /** Instantiate a new ContentViewTag, optionally basing it on the given data. */
+  constructor(data?: Partial<ContentViewTag> | {[k: string]: any}) {
+    Object.assign(this, ContentViewTag.map(data || {}));
   }
 }
 
@@ -2227,6 +2284,8 @@ declare module "coalesce-vue/lib/model" {
     ComplexModel: ComplexModel
     ComplexModelDependent: ComplexModelDependent
     ContentViewEntity: ContentViewEntity
+    ContentViewEntityTagLink: ContentViewEntityTagLink
+    ContentViewTag: ContentViewTag
     Course: Course
     DateOnlyPk: DateOnlyPk
     DateTimeOffsetPk: DateTimeOffsetPk

@@ -56,6 +56,8 @@ public class AppDbContext : DbContext
 
     public DbSet<SuppressedDefaultOrdering> SuppressedDefaultOrderings { get; set; }
     public DbSet<ContentViewEntity> ContentViewEntities { get; set; }
+    public DbSet<ContentViewEntityTagLink> ContentViewEntityTagLinks { get; set; }
+    public DbSet<ContentViewTag> ContentViewTags { get; set; }
 
     public DbSet<Student> Students { get; set; }
     public DbSet<Advisor> Advisors { get; set; }

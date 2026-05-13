@@ -3313,6 +3313,14 @@ export const ContentViewEntity = domain.types.ContentViewEntity = {
       type: "string",
       role: "value",
     },
+    createdAt: {
+      name: "createdAt",
+      displayName: "Created At",
+      type: "date",
+      dateKind: "datetime",
+      noOffset: true,
+      role: "value",
+    },
     assignedToId: {
       name: "assignedToId",
       displayName: "Assigned To Id",
@@ -3351,6 +3359,22 @@ export const ContentViewEntity = domain.types.ContentViewEntity = {
       get principalKey() { return (domain.types.Person as ModelType & { name: "Person" }).props.personId as PrimaryKeyProperty },
       dontSerialize: true,
     },
+    tags: {
+      name: "tags",
+      displayName: "Tags",
+      type: "collection",
+      itemType: {
+        name: "$collectionItem",
+        displayName: "",
+        role: "value",
+        type: "model",
+        get typeDef() { return (domain.types.ContentViewEntityTagLink as ModelType & { name: "ContentViewEntityTagLink" }) },
+      },
+      role: "collectionNavigation",
+      get foreignKey() { return (domain.types.ContentViewEntityTagLink as ModelType & { name: "ContentViewEntityTagLink" }).props.contentViewEntityId as ForeignKeyProperty },
+      get inverseNavigation() { return (domain.types.ContentViewEntityTagLink as ModelType & { name: "ContentViewEntityTagLink" }).props.contentViewEntity as ModelReferenceNavigationProperty },
+      dontSerialize: true,
+    },
     neverMapped: {
       name: "neverMapped",
       displayName: "Never Mapped",
@@ -3360,6 +3384,115 @@ export const ContentViewEntity = domain.types.ContentViewEntity = {
     reportedByCompanyName: {
       name: "reportedByCompanyName",
       displayName: "Reported By Company Name",
+      type: "string",
+      role: "value",
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
+export const ContentViewEntityTagLink = domain.types.ContentViewEntityTagLink = {
+  name: "ContentViewEntityTagLink" as const,
+  displayName: "Content View Entity Tag Link",
+  get displayProp() { return this.props.contentViewEntityTagLinkId }, 
+  type: "model",
+  controllerRoute: "ContentViewEntityTagLink",
+  get keyProp() { return this.props.contentViewEntityTagLinkId }, 
+  behaviorFlags: 7 as BehaviorFlags,
+  props: {
+    contentViewEntityTagLinkId: {
+      name: "contentViewEntityTagLinkId",
+      displayName: "Content View Entity Tag Link Id",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    contentViewEntityId: {
+      name: "contentViewEntityId",
+      displayName: "Content View Entity Id",
+      type: "number",
+      role: "foreignKey",
+      get principalKey() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }).props.contentViewEntityId as PrimaryKeyProperty },
+      get principalType() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }) },
+      get navigationProp() { return (domain.types.ContentViewEntityTagLink as ModelType & { name: "ContentViewEntityTagLink" }).props.contentViewEntity as ModelReferenceNavigationProperty },
+      hidden: 3 as HiddenAreas,
+      rules: {
+        required: val => val != null || "Content View Entity is required.",
+      }
+    },
+    contentViewEntity: {
+      name: "contentViewEntity",
+      displayName: "Content View Entity",
+      type: "model",
+      get typeDef() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }) },
+      role: "referenceNavigation",
+      get foreignKey() { return (domain.types.ContentViewEntityTagLink as ModelType & { name: "ContentViewEntityTagLink" }).props.contentViewEntityId as ForeignKeyProperty },
+      get principalKey() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }).props.contentViewEntityId as PrimaryKeyProperty },
+      get inverseNavigation() { return (domain.types.ContentViewEntity as ModelType & { name: "ContentViewEntity" }).props.tags as ModelCollectionNavigationProperty },
+      dontSerialize: true,
+    },
+    tagId: {
+      name: "tagId",
+      displayName: "Tag Id",
+      type: "number",
+      role: "foreignKey",
+      get principalKey() { return (domain.types.ContentViewTag as ModelType & { name: "ContentViewTag" }).props.id as PrimaryKeyProperty },
+      get principalType() { return (domain.types.ContentViewTag as ModelType & { name: "ContentViewTag" }) },
+      get navigationProp() { return (domain.types.ContentViewEntityTagLink as ModelType & { name: "ContentViewEntityTagLink" }).props.tag as ModelReferenceNavigationProperty },
+      hidden: 3 as HiddenAreas,
+      rules: {
+        required: val => val != null || "Tag is required.",
+      }
+    },
+    tag: {
+      name: "tag",
+      displayName: "Tag",
+      type: "model",
+      get typeDef() { return (domain.types.ContentViewTag as ModelType & { name: "ContentViewTag" }) },
+      role: "referenceNavigation",
+      get foreignKey() { return (domain.types.ContentViewEntityTagLink as ModelType & { name: "ContentViewEntityTagLink" }).props.tagId as ForeignKeyProperty },
+      get principalKey() { return (domain.types.ContentViewTag as ModelType & { name: "ContentViewTag" }).props.id as PrimaryKeyProperty },
+      dontSerialize: true,
+    },
+    id: {
+      name: "id",
+      displayName: "Id",
+      type: "number",
+      role: "value",
+    },
+    name: {
+      name: "name",
+      displayName: "Name",
+      type: "string",
+      role: "value",
+    },
+  },
+  methods: {
+  },
+  dataSources: {
+  },
+}
+export const ContentViewTag = domain.types.ContentViewTag = {
+  name: "ContentViewTag" as const,
+  displayName: "Content View Tag",
+  get displayProp() { return this.props.name }, 
+  type: "model",
+  controllerRoute: "ContentViewTag",
+  get keyProp() { return this.props.id }, 
+  behaviorFlags: 7 as BehaviorFlags,
+  props: {
+    id: {
+      name: "id",
+      displayName: "Id",
+      type: "number",
+      role: "primaryKey",
+      hidden: 3 as HiddenAreas,
+    },
+    name: {
+      name: "name",
+      displayName: "Name",
       type: "string",
       role: "value",
     },
@@ -6398,6 +6531,8 @@ interface AppDomain extends Domain {
     ComplexModel: typeof ComplexModel
     ComplexModelDependent: typeof ComplexModelDependent
     ContentViewEntity: typeof ContentViewEntity
+    ContentViewEntityTagLink: typeof ContentViewEntityTagLink
+    ContentViewTag: typeof ContentViewTag
     Course: typeof Course
     DateOnlyPk: typeof DateOnlyPk
     DateTimeOffsetPk: typeof DateTimeOffsetPk

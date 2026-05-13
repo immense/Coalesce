@@ -11,6 +11,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace IntelliTect.Coalesce.TypeDefinition;
 
@@ -264,12 +265,79 @@ public abstract class ClassViewModel : IAttributeProvider
             || !DtoContentViews.TryGetValue(contentView, out var includeByDefault)
             || includeByDefault;
 
+    private IReadOnlyList<string>? _ownResponseContentViews;
+    public IReadOnlyList<string> OwnResponseContentViews
+        => _ownResponseContentViews ??= CollectResponseContentViews(this)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    private IReadOnlyList<string>? _generatedResponseContentViews;
+    public IReadOnlyList<string> GeneratedResponseContentViews
+        => _generatedResponseContentViews ??= (ClientBaseTypes.FirstOrDefault()?.GeneratedResponseContentViews ?? [])
+            .Concat(OwnResponseContentViews)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    private DtoDateTimeMode? _responseDtoDateTimeMode;
+    public DtoDateTimeMode ResponseDtoDateTimeMode
+        => _responseDtoDateTimeMode ??=
+            this.GetAttributeValue<DtoDateTimeOptionsAttribute, DtoDateTimeMode>(a => a.Mode)
+            ?? Type.Assembly.GetAttributeValue<DtoDateTimeOptionsAttribute, DtoDateTimeMode>(a => a.Mode)
+            ?? DtoDateTimeMode.Preserve;
+
     public string? DefaultGetDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Get);
     public string? DefaultListDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.List);
     public string? DefaultCountDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Count);
     public string? DefaultSaveDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Save);
     public string? DefaultBulkSaveDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.BulkSave);
     public string? DefaultDeleteDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Delete);
+    public bool UseContentViewResponseTypes => this.GetAttributeValue<DtoActionDefaultsAttribute, bool>(a => a.UseContentViewResponseTypes) ?? false;
+
+    public bool ShouldUseContentViewResponseType(string? contentView)
+        => UseContentViewResponseTypes && !string.IsNullOrWhiteSpace(contentView);
+
+    public bool HasResponseDtoTypeForContentView(string? contentView)
+        => !string.IsNullOrWhiteSpace(contentView)
+            && GeneratedResponseContentViews.Contains(contentView, StringComparer.Ordinal);
+
+    public string ResponseDtoTypeNameForContentView(string contentView)
+        => $"{ClientTypeName}{GetContentViewResponseTypeSuffix(contentView)}Response";
+
+    public string GetStandardActionResponseDtoTypeName(string? contentView)
+        => ShouldUseContentViewResponseType(contentView)
+            ? ResponseDtoTypeNameForContentView(contentView!)
+            : ResponseDtoTypeName;
+
+    private static IEnumerable<string> CollectResponseContentViews(ClassViewModel model)
+        => model.DtoContentViews.Keys
+            .Concat(new[]
+            {
+                model.DefaultGetDtoIncludes,
+                model.DefaultListDtoIncludes,
+                model.DefaultCountDtoIncludes,
+                model.DefaultSaveDtoIncludes,
+                model.DefaultBulkSaveDtoIncludes,
+                model.DefaultDeleteDtoIncludes,
+            }.OfType<string>().Where(v => !string.IsNullOrWhiteSpace(v)))
+            .Concat(model.ClientProperties.SelectMany(p => p.DtoIncludes.Concat(p.DtoExcludes)))
+            .Concat(model.FlattenedResponseProperties.SelectMany(p => p.ContentViews.Concat(p.ExcludedContentViews)))
+            .Concat(model.SummaryProperties.SelectMany(p => p.ContentViews.Concat(p.ExcludedContentViews)))
+            .Where(v => !string.IsNullOrWhiteSpace(v));
+
+    private static string GetContentViewResponseTypeSuffix(string contentView)
+    {
+        var parts = Regex.Split(contentView, @"[^A-Za-z0-9]+")
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.ToPascalCase());
+
+        var suffix = string.Concat(parts);
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            suffix = "View";
+        }
+
+        return suffix.GetValidCSharpIdentifier();
+    }
 
     /// <summary>
     /// List of method names that should not be exposed to the client.

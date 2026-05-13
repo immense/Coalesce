@@ -21,16 +21,31 @@ public class DtoContentViewGenerationTests : CodeGenTestBase
         var dtoFile = Directory.GetFiles(outDir, "ContentViewEntityDto.g.cs", SearchOption.AllDirectories).Single();
         var controllerFile = Directory.GetFiles(outDir, "ContentViewEntityController.g.cs", SearchOption.AllDirectories).Single();
         var personDtoFile = Directory.GetFiles(outDir, "PersonDto.g.cs", SearchOption.AllDirectories).Single();
+        var tagLinkDtoFile = Directory.GetFiles(outDir, "ContentViewEntityTagLinkDto.g.cs", SearchOption.AllDirectories).Single();
 
         var dtoContents = await File.ReadAllTextAsync(dtoFile);
         var controllerContents = await File.ReadAllTextAsync(controllerFile);
         var personDtoContents = await File.ReadAllTextAsync(personDtoFile);
+        var tagLinkDtoContents = await File.ReadAllTextAsync(tagLinkDtoFile);
 
-        await Assert.That(controllerContents.Contains("GetImplementation(id, ApplyDefaultIncludes(parameters, \"detail\"), dataSource)")).IsTrue();
-        await Assert.That(controllerContents.Contains("ListImplementation(ApplyDefaultIncludes(parameters, \"list\"), dataSource)")).IsTrue();
-        await Assert.That(controllerContents.Contains("SaveImplementation(dto, ApplyDefaultIncludes(parameters, \"save\"), dataSource, behaviors)")).IsTrue();
-        await Assert.That(controllerContents.Contains("CountImplementation(ApplyDefaultIncludes(parameters, \"list\"), dataSource)")).IsTrue();
+        await Assert.That(controllerContents.Contains("Task<ItemResult<ContentViewEntityDetailResponse>> Get(")).IsTrue();
+        await Assert.That(controllerContents.Contains("GetImplementation<ContentViewEntityDetailResponse>(id, ApplyFixedIncludes(parameters, \"detail\"), dataSource)")).IsTrue();
+        await Assert.That(controllerContents.Contains("Task<ListResult<ContentViewEntityListResponse>> List(")).IsTrue();
+        await Assert.That(controllerContents.Contains("ListImplementation<ContentViewEntityListResponse>(ApplyFixedIncludes(parameters, \"list\"), dataSource)")).IsTrue();
+        await Assert.That(controllerContents.Contains("Task<ItemResult<ContentViewEntitySaveResponse>> Save(")).IsTrue();
+        await Assert.That(controllerContents.Contains("SaveImplementation<ContentViewEntitySaveResponse>(dto, ApplyFixedIncludes(parameters, \"save\"), dataSource, behaviors)")).IsTrue();
+        await Assert.That(controllerContents.Contains("CountImplementation(ApplyFixedIncludes(parameters, \"list\"), dataSource)")).IsTrue();
 
+        await Assert.That(dtoContents.Contains("public partial class ContentViewEntityListResponse")).IsTrue();
+        await Assert.That(dtoContents.Contains("public partial class ContentViewEntityDetailResponse")).IsTrue();
+        await Assert.That(dtoContents.Contains("public partial class ContentViewEntitySaveResponse")).IsTrue();
+        await Assert.That(dtoContents.Contains("public System.DateTime? CreatedAtUTC { get; set; }")).IsTrue();
+        await Assert.That(dtoContents.Contains("this.CreatedAtUTC = obj.CreatedAt.ToUniversalTime();")).IsTrue();
+        await Assert.That(dtoContents.Contains("ContentViewEntityTagLinkDetailResponse> Tags { get; set; }")).IsTrue();
+        await Assert.That(tagLinkDtoContents.Contains("public partial class ContentViewEntityTagLinkDetailResponse")).IsTrue();
+        await Assert.That(tagLinkDtoContents.Contains("public partial class ContentViewEntityTagLinkListResponse")).IsTrue();
+        await Assert.That(tagLinkDtoContents.Contains("this.Id = obj.Tag?.Id;")).IsTrue();
+        await Assert.That(tagLinkDtoContents.Contains("this.Name = obj.Tag?.Name;")).IsTrue();
         await Assert.That(dtoContents.Contains("this.ReportedByCompanyName = obj.ReportedBy?.Company?.Name;")).IsTrue();
         await Assert.That(dtoContents.Contains("includes == \"detail\"")).IsTrue();
         await Assert.That(dtoContents.Contains("includes == \"list\"")).IsTrue();

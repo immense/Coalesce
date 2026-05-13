@@ -997,14 +997,22 @@ export interface ContentViewEntityViewModel extends $models.ContentViewEntity {
   contentViewEntityId: number | null;
   name: string | null;
   description: string | null;
+  createdAt: Date | null;
   assignedToId: number | null;
   assignedTo: $models.PersonSummary | null;
   reportedById: number | null;
   get reportedBy(): PersonViewModel | null;
   set reportedBy(value: PersonViewModel | $models.Person | null);
+  get tags(): ViewModelCollection<ContentViewEntityTagLinkViewModel, $models.ContentViewEntityTagLink>;
+  set tags(value: (ContentViewEntityTagLinkViewModel | $models.ContentViewEntityTagLink)[] | null);
   neverMapped: string | null;
 }
 export class ContentViewEntityViewModel extends ViewModel<$models.ContentViewEntity, $apiClients.ContentViewEntityApiClient, number> implements $models.ContentViewEntity  {
+  
+  
+  public addToTags(initialData?: DeepPartial<$models.ContentViewEntityTagLink> | null) {
+    return this.$addChild('tags', initialData) as ContentViewEntityTagLinkViewModel
+  }
   
   constructor(initialData?: DeepPartial<$models.ContentViewEntity> | null) {
     super($metadata.ContentViewEntity, new $apiClients.ContentViewEntityApiClient(), initialData)
@@ -1016,6 +1024,51 @@ export class ContentViewEntityListViewModel extends ListViewModel<$models.Conten
   
   constructor() {
     super($metadata.ContentViewEntity, new $apiClients.ContentViewEntityApiClient())
+  }
+}
+
+
+export interface ContentViewEntityTagLinkViewModel extends $models.ContentViewEntityTagLink {
+  contentViewEntityTagLinkId: number | null;
+  contentViewEntityId: number | null;
+  get contentViewEntity(): ContentViewEntityViewModel | null;
+  set contentViewEntity(value: ContentViewEntityViewModel | $models.ContentViewEntity | null);
+  tagId: number | null;
+  get tag(): ContentViewTagViewModel | null;
+  set tag(value: ContentViewTagViewModel | $models.ContentViewTag | null);
+}
+export class ContentViewEntityTagLinkViewModel extends ViewModel<$models.ContentViewEntityTagLink, $apiClients.ContentViewEntityTagLinkApiClient, number> implements $models.ContentViewEntityTagLink  {
+  
+  constructor(initialData?: DeepPartial<$models.ContentViewEntityTagLink> | null) {
+    super($metadata.ContentViewEntityTagLink, new $apiClients.ContentViewEntityTagLinkApiClient(), initialData)
+  }
+}
+defineProps(ContentViewEntityTagLinkViewModel, $metadata.ContentViewEntityTagLink)
+
+export class ContentViewEntityTagLinkListViewModel extends ListViewModel<$models.ContentViewEntityTagLink, $apiClients.ContentViewEntityTagLinkApiClient, ContentViewEntityTagLinkViewModel> {
+  
+  constructor() {
+    super($metadata.ContentViewEntityTagLink, new $apiClients.ContentViewEntityTagLinkApiClient())
+  }
+}
+
+
+export interface ContentViewTagViewModel extends $models.ContentViewTag {
+  id: number | null;
+  name: string | null;
+}
+export class ContentViewTagViewModel extends ViewModel<$models.ContentViewTag, $apiClients.ContentViewTagApiClient, number> implements $models.ContentViewTag  {
+  
+  constructor(initialData?: DeepPartial<$models.ContentViewTag> | null) {
+    super($metadata.ContentViewTag, new $apiClients.ContentViewTagApiClient(), initialData)
+  }
+}
+defineProps(ContentViewTagViewModel, $metadata.ContentViewTag)
+
+export class ContentViewTagListViewModel extends ListViewModel<$models.ContentViewTag, $apiClients.ContentViewTagApiClient, ContentViewTagViewModel> {
+  
+  constructor() {
+    super($metadata.ContentViewTag, new $apiClients.ContentViewTagApiClient())
   }
 }
 
@@ -1986,6 +2039,8 @@ const viewModelTypeLookup = ViewModel.typeLookup = {
   ComplexModel: ComplexModelViewModel,
   ComplexModelDependent: ComplexModelDependentViewModel,
   ContentViewEntity: ContentViewEntityViewModel,
+  ContentViewEntityTagLink: ContentViewEntityTagLinkViewModel,
+  ContentViewTag: ContentViewTagViewModel,
   Course: CourseViewModel,
   DateOnlyPk: DateOnlyPkViewModel,
   DateTimeOffsetPk: DateTimeOffsetPkViewModel,
@@ -2033,6 +2088,8 @@ const listViewModelTypeLookup = ListViewModel.typeLookup = {
   ComplexModel: ComplexModelListViewModel,
   ComplexModelDependent: ComplexModelDependentListViewModel,
   ContentViewEntity: ContentViewEntityListViewModel,
+  ContentViewEntityTagLink: ContentViewEntityTagLinkListViewModel,
+  ContentViewTag: ContentViewTagListViewModel,
   Course: CourseListViewModel,
   DateOnlyPk: DateOnlyPkListViewModel,
   DateTimeOffsetPk: DateTimeOffsetPkListViewModel,
