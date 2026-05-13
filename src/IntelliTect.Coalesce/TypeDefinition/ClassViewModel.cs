@@ -87,7 +87,21 @@ public abstract class ClassViewModel : IAttributeProvider
         : "public";
 
     public string ParameterDtoTypeName => IsCustomDto ? FullyQualifiedName : $"{ClientTypeName}Parameter";
-    public string ResponseDtoTypeName => IsCustomDto ? FullyQualifiedName : $"{ClientTypeName}Response";
+
+    public string ResponseDtoTypeName => IsCustomDto
+        ? FullyQualifiedName
+        : this.GetAttributeValue<CoalesceAttribute>(a => a.ResponseDtoClassName) ?? $"{ClientTypeName}Response";
+
+    private string ResponseDtoTypeNameStem
+    {
+        get
+        {
+            var responseTypeName = ResponseDtoTypeName;
+            return responseTypeName.EndsWith("Response", StringComparison.Ordinal)
+                ? responseTypeName[..^"Response".Length]
+                : responseTypeName;
+        }
+    }
 
     public ClassViewModel BaseViewModel => DtoBaseViewModel ?? this;
 
@@ -301,7 +315,7 @@ public abstract class ClassViewModel : IAttributeProvider
             && GeneratedResponseContentViews.Contains(contentView, StringComparer.Ordinal);
 
     public string ResponseDtoTypeNameForContentView(string contentView)
-        => $"{ClientTypeName}{GetContentViewResponseTypeSuffix(contentView)}Response";
+        => $"{ResponseDtoTypeNameStem}{GetContentViewResponseTypeSuffix(contentView)}Response";
 
     public string GetStandardActionResponseDtoTypeName(string? contentView)
         => ShouldUseContentViewResponseType(contentView)

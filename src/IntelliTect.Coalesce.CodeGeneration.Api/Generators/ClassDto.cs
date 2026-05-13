@@ -336,7 +336,9 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             var orderedProps = Model
                 .ClientProperties
                 .Where(p => p.SecurityInfo.Read.IsAllowed())
-                .Where(p => fixedContentView is null || p.IsMappedForContentView(fixedContentView))
+                .Where(p => fixedContentView is null
+                    ? ShouldEmitInBaseResponse(p)
+                    : p.IsMappedForContentView(fixedContentView))
                 // PK always first so it is available to guide decisions in IPropertyRestrictions
                 .OrderBy(p => !p.IsPrimaryKey)
                     // Scalars before objects
@@ -347,7 +349,9 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
 
             var ownProps = orderedProps.Where(p => baseType?.PropertyByName(p.Name) is null);
             var flattenedProps = Model.FlattenedResponseProperties
-                .Where(p => (fixedContentView is null || p.IsMappedForContentView(fixedContentView))
+                .Where(p => (fixedContentView is null
+                        ? ShouldEmitInBaseResponse(p)
+                        : p.IsMappedForContentView(fixedContentView))
                     && baseType?.PropertyByName(p.Name) is null
                     && !(baseType?.FlattenedResponseProperties.Any(fp => fp.Name == p.Name) ?? false))
                 .ToList();
@@ -709,6 +713,16 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         => (
             GetContentViewConditionals(property.Parent, property.ContentViews, property.ExcludedContentViews),
             $"this.{ResponsePropertyName(property)} = {TransformResponseValue(property.Type, property.AccessExpression("obj"))};");
+
+    private bool ShouldEmitInBaseResponse(PropertyViewModel property)
+        => !Model.UseContentViewResponseTypes
+            || Model.GeneratedResponseContentViews.Count == 0
+            || Model.GeneratedResponseContentViews.Any(property.IsMappedForContentView);
+
+    private bool ShouldEmitInBaseResponse(FlattenedResponsePropertyViewModel property)
+        => !Model.UseContentViewResponseTypes
+            || Model.GeneratedResponseContentViews.Count == 0
+            || Model.GeneratedResponseContentViews.Any(property.IsMappedForContentView);
 
     private static IEnumerable<string> GetContentViewConditionals(
         ClassViewModel declaringClass,

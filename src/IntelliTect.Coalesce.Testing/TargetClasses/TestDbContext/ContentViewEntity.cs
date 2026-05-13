@@ -1,3 +1,4 @@
+using IntelliTect.Coalesce;
 using IntelliTect.Coalesce.DataAnnotations;
 using System;
 using System.Collections.Generic;
@@ -5,6 +6,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace IntelliTect.Coalesce.Testing.TargetClasses.TestDbContext;
 
+[Coalesce(ResponseDtoClassName = "GetContentViewEntityResponse")]
 [Create(PermissionLevel = SecurityPermissionLevels.AllowAll)]
 [Edit(PermissionLevel = SecurityPermissionLevels.AllowAll)]
 [DtoContentView("list", IncludeByDefault = false)]
