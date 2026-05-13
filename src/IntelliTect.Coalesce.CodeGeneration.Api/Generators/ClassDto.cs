@@ -57,6 +57,11 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             WriteParameterDto(b);
             b.Line();
             WriteResponseDto(b);
+            foreach (var contentView in Model.GeneratedResponseContentViews)
+            {
+                b.Line();
+                WriteResponseDto(b, contentView);
+            }
             if (Model.ShouldGenerateSummaryDto)
             {
                 b.Line();
@@ -299,29 +304,41 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
     }
 
     private void WriteResponseDto(CSharpCodeBuilder b)
+        => WriteResponseDto(b, contentView: null);
+
+    private void WriteResponseDto(CSharpCodeBuilder b, string contentView)
     {
-        var allVariants = Model.ClientDerivedTypes;
+        var fixedContentView = string.IsNullOrWhiteSpace(contentView) ? null : contentView;
+        var responseTypeName = GetGeneratedResponseDtoTypeName(Model, fixedContentView);
+
+        var allVariants = fixedContentView is null
+            ? Model.ClientDerivedTypes
+            : Model.ClientDerivedTypes.Where(d => d.HasResponseDtoTypeForContentView(fixedContentView));
+
         if (allVariants.Any() && !Model.Type.IsAbstract) allVariants = allVariants.Prepend(Model);
         foreach (var derived in allVariants)
         {
-            b.Line($"[JsonDerivedType(typeof({derived.ResponseDtoTypeName}), typeDiscriminator: {derived.ClientTypeName.QuotedStringLiteralForCSharp()})]");
+            b.Line($"[JsonDerivedType(typeof({GetGeneratedResponseDtoTypeName(derived, fixedContentView)}), typeDiscriminator: {derived.ClientTypeName.QuotedStringLiteralForCSharp()})]");
         }
 
         ClassViewModel baseType = Model.ClientBaseTypes.FirstOrDefault();
 
         string inheritClause = baseType is not null
-            ? $"{baseType.ResponseDtoTypeName}, IGeneratedResponseDto<{Model.FullyQualifiedName}>"
+            ? $"{GetGeneratedResponseDtoTypeName(baseType, fixedContentView)}, IGeneratedResponseDto<{Model.FullyQualifiedName}>"
             : $"IGeneratedResponseDto<{Model.FullyQualifiedName}>";
 
-        using (b.Block($"public partial class {Model.ResponseDtoTypeName} : {inheritClause}"))
+        using (b.Block($"public partial class {responseTypeName} : {inheritClause}"))
         {
-            b.Line($"public {Model.ResponseDtoTypeName}() {{ }}");
+            b.Line($"public {responseTypeName}() {{ }}");
 
             b.Line();
 
             var orderedProps = Model
                 .ClientProperties
                 .Where(p => p.SecurityInfo.Read.IsAllowed())
+                .Where(p => fixedContentView is null
+                    ? ShouldEmitInBaseResponse(p)
+                    : p.IsMappedForContentView(fixedContentView))
                 // PK always first so it is available to guide decisions in IPropertyRestrictions
                 .OrderBy(p => !p.IsPrimaryKey)
                     // Scalars before objects
@@ -332,17 +349,20 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
 
             var ownProps = orderedProps.Where(p => baseType?.PropertyByName(p.Name) is null);
             var flattenedProps = Model.FlattenedResponseProperties
-                .Where(p => baseType?.PropertyByName(p.Name) is null
+                .Where(p => (fixedContentView is null
+                        ? ShouldEmitInBaseResponse(p)
+                        : p.IsMappedForContentView(fixedContentView))
+                    && baseType?.PropertyByName(p.Name) is null
                     && !(baseType?.FlattenedResponseProperties.Any(fp => fp.Name == p.Name) ?? false))
                 .ToList();
 
             foreach (PropertyViewModel prop in ownProps)
             {
-                b.Line($"public {ResponsePropertyType(prop)} {prop.Name} {{ get; set; }}");
+                b.Line($"public {ResponsePropertyType(prop, fixedContentView)} {ResponsePropertyName(prop)} {{ get; set; }}");
             }
             foreach (var prop in flattenedProps)
             {
-                b.Line($"public {prop.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {prop.Name} {{ get; set; }}");
+                b.Line($"public {prop.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {ResponsePropertyName(prop)} {{ get; set; }}");
             }
 
             b.DocComment("Map from the domain object to the properties of the current DTO instance.");
@@ -350,7 +370,9 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             {
                 b.Line("if (obj is null) return;");
 
-                var derivedTypes = Model.ClientDerivedTypes.ToList();
+                var derivedTypes = fixedContentView is null
+                    ? Model.ClientDerivedTypes.ToList()
+                    : Model.ClientDerivedTypes.Where(d => d.HasResponseDtoTypeForContentView(fixedContentView)).ToList();
                 if (derivedTypes.Any())
                 {
                     // Dispatch to derived types, since usages of this DTO in other generated code will
@@ -359,19 +381,22 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
                     {
                         foreach (var derived in derivedTypes)
                         {
-                            b.Line($"case {derived.ResponseDtoTypeName} _{derived.Name}:");
+                            b.Line($"case {GetGeneratedResponseDtoTypeName(derived, fixedContentView)} _{derived.Name}:");
                             b.Indented($"_{derived.Name}.MapFrom(({derived.FullyQualifiedName})obj, context, tree);");
                             b.Indented($"return;");
                         }
                     }
                 }
 
-                b.Line("var includes = context.Includes;");
-                b.Line();
+                if (fixedContentView is null)
+                {
+                    b.Line("var includes = context.Includes;");
+                    b.Line();
+                }
 
                 WriteSetters(b, orderedProps
-                    .Select(ModelToDtoPropertySetter)
-                    .Concat(flattenedProps.Select(ModelToDtoFlattenedPropertySetter)));
+                    .Select(p => ModelToDtoPropertySetter(p, fixedContentView))
+                    .Concat(flattenedProps.Select(p => ModelToDtoFlattenedPropertySetter(p, fixedContentView))));
             }
         }
     }
@@ -385,11 +410,11 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         {
             b.Line($"public {Model.SummaryDtoTypeName}() {{ }}");
             b.Line();
-            b.Line($"public {primaryKey.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {primaryKey.Name} {{ get; set; }}");
+            b.Line($"public {primaryKey.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {ResponsePropertyName(primaryKey)} {{ get; set; }}");
 
             foreach (var prop in Model.SummaryProperties)
             {
-                b.Line($"public {prop.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {prop.Name} {{ get; set; }}");
+                b.Line($"public {prop.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)} {ResponsePropertyName(prop)} {{ get; set; }}");
             }
 
             b.DocComment("Map from the domain object to the properties of the current summary DTO instance.");
@@ -398,7 +423,7 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
                 b.Line("if (obj is null) return;");
                 b.Line("var includes = context.Includes;");
                 b.Line();
-                b.Line($"this.{primaryKey.Name} = obj.{primaryKey.Name};");
+                b.Line($"this.{ResponsePropertyName(primaryKey)} = {TransformResponseValue(primaryKey.Type, $"obj.{primaryKey.Name}")};");
                 WriteSetters(b, Model.SummaryProperties.Select(ModelToSummaryDtoPropertySetter));
             }
         }
@@ -453,11 +478,13 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
     /// <param name="property">The property whose permissions will be evaluated.</param>
     /// <param name="permission">The permission info to pull the required roles from.</param>
     /// <param name="modelVar">The variable that holds the entity/model instance.</param>
+    /// <param name="fixedContentView">The fixed content view for action-specific response DTOs, if any.</param>
     /// <returns></returns>
     private IEnumerable<string> GetPropertySetterConditional(
         PropertyViewModel property,
         PropertySecurityPermission permission,
-        string modelVar)
+        string modelVar,
+        string fixedContentView = null)
     {
         string RoleCheck(string role) => $"context.IsInRoleCached(\"{role.EscapeStringLiteralForCSharp()}\")";
         string IncludesCheck(string include) => $"includes == \"{include.EscapeStringLiteralForCSharp()}\"";
@@ -470,17 +497,21 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             )
             .Distinct());
 
-        var includes = string.Join(" || ", property.DtoIncludes.Select(IncludesCheck));
-        var excludes = string.Join(" || ", property.DtoExcludes.Select(IncludesCheck));
-        var explicitViewExcludes = string.Join(" || ", property.EffectiveParent.DtoContentViews
-            .Where(v => !v.Value && !property.DtoIncludes.Contains(v.Key, StringComparer.Ordinal))
-            .Select(v => IncludesCheck(v.Key)));
-
         var statement = new List<string>();
         if (!string.IsNullOrEmpty(roles)) statement.Add($"({roles})");
-        if (!string.IsNullOrEmpty(includes)) statement.Add($"({includes})");
-        if (!string.IsNullOrEmpty(excludes)) statement.Add($"!({excludes})");
-        if (!string.IsNullOrEmpty(explicitViewExcludes)) statement.Add($"!({explicitViewExcludes})");
+
+        if (fixedContentView is null)
+        {
+            var includes = string.Join(" || ", property.DtoIncludes.Select(IncludesCheck));
+            var excludes = string.Join(" || ", property.DtoExcludes.Select(IncludesCheck));
+            var explicitViewExcludes = string.Join(" || ", property.EffectiveParent.DtoContentViews
+                .Where(v => !v.Value && !property.DtoIncludes.Contains(v.Key, StringComparer.Ordinal))
+                .Select(v => IncludesCheck(v.Key)));
+
+            if (!string.IsNullOrEmpty(includes)) statement.Add($"({includes})");
+            if (!string.IsNullOrEmpty(excludes)) statement.Add($"!({excludes})");
+            if (!string.IsNullOrEmpty(explicitViewExcludes)) statement.Add($"!({explicitViewExcludes})");
+        }
 
         foreach (var restriction in property.SecurityInfo.Restrictions)
         {
@@ -553,19 +584,22 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
     /// Get the conditional and a C# expression that will map the property from a local object to a DTO.
     /// </summary>
     /// <param name="property">The property to map</param>
-    private (IEnumerable<string> conditionals, string setter) ModelToDtoPropertySetter(PropertyViewModel property)
+    /// <param name="fixedContentView">The fixed content view for action-specific response DTOs, if any.</param>
+    private (IEnumerable<string> conditionals, string setter) ModelToDtoPropertySetter(PropertyViewModel property, string fixedContentView = null)
     {
         string name = property.Name;
+        string dtoName = ResponsePropertyName(property);
         string dtoVar = "this";
+        string targetDtoTypeName = GetResponseDtoTypeName(property, fixedContentView);
 
         string setter;
         string mapCall() => property.Object.IsCustomDto
             ? "" // If we hang an IClassDto off an external type, or another IClassDto, no mapping needed - it is already the desired type.
-            : $".MapToDto<{property.Object.FullyQualifiedName}, {GetResponseDtoTypeName(property)}>(context, tree?[nameof({dtoVar}.{name})])";
+            : $".MapToDto<{property.Object.FullyQualifiedName}, {targetDtoTypeName}>(context, tree?[nameof({dtoVar}.{dtoName})])";
 
         if (property.Type.IsDictionary)
         {
-            setter = $"{dtoVar}.{name} = {DictionaryModelToDtoExpression(property.Type, $"obj.{name}")};";
+            setter = $"{dtoVar}.{dtoName} = {DictionaryModelToDtoExpression(property.Type, $"obj.{name}", fixedContentView)};";
         }
         else if (property.Type.IsCollection)
         {
@@ -580,12 +614,12 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
                 sb.Append($"if (propVal{name} != null");
                 if (property.Object.HasDbSet)
                 {
-                    sb.Append($" && (tree == null || tree[nameof({dtoVar}.{name})] != null)");
+                    sb.Append($" && (tree == null || tree[nameof({dtoVar}.{dtoName})] != null)");
                 }
                 sb.Line(") {");
                 using (sb.Indented())
                 {
-                    sb.Line($"{dtoVar}.{name} = propVal{name}");
+                    sb.Line($"{dtoVar}.{dtoName} = propVal{name}");
 
                     var defaultOrderBy = property.Object.DefaultOrderBy;
                     if (defaultOrderBy.Count > 0)
@@ -615,8 +649,8 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
                 {
                     // If we know for sure that we're loading these things (becuse the IncludeTree said so),
                     // but EF didn't load any, then add a blank collection so the client will delete any that already exist.
-                    sb.Line($"}} else if (propVal{name} == null && tree?[nameof({dtoVar}.{name})] != null) {{");
-                    sb.Indented($"{dtoVar}.{name} = new {property.Object.ResponseDtoTypeName}[0];");
+                    sb.Line($"}} else if (propVal{name} == null && tree?[nameof({dtoVar}.{dtoName})] != null) {{");
+                    sb.Indented($"{dtoVar}.{dtoName} = new {targetDtoTypeName}[0];");
                     sb.Line("}");
                 }
                 else
@@ -635,14 +669,14 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
                 {
                     // Collection types which emit properly compatible property types on the DTO.
                     // No coersion to a real collection type required.
-                    setter = $"{dtoVar}.{name} = obj.{name};";
+                    setter = $"{dtoVar}.{dtoName} = obj.{name};";
                 }
                 else
                 {
                     // Collection is not really a collection. Probably an IEnumerable.
                     // We will have emitted the property type as ICollection,
                     // so we need to do a ToList() so that it can be assigned.
-                    setter = $"{dtoVar}.{name} = obj.{name}?.ToList();";
+                    setter = $"{dtoVar}.{dtoName} = obj.{name}?.ToList();";
                 }
             }
 
@@ -652,31 +686,43 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             // Only check the includes tree for things that are in the database.
             // Otherwise, this would break IncludesExternal.
             string treeCheck = property.Type.ClassViewModel.HasDbSet
-                ? $"if (tree == null || tree[nameof({dtoVar}.{name})] != null)"
+                ? $"if (tree == null || tree[nameof({dtoVar}.{dtoName})] != null)"
                 : "";
 
             setter = $@"{treeCheck}
-                {dtoVar}.{name} = obj.{name}{mapCall()};
+                {dtoVar}.{dtoName} = obj.{name}{mapCall()};
 ";
         }
         else
         {
-            setter = $"{dtoVar}.{name} = obj.{name};";
+            setter = $"{dtoVar}.{dtoName} = {TransformResponseValue(property.Type, $"obj.{name}")};";
         }
 
-        var statement = GetPropertySetterConditional(property, property.SecurityInfo.Read, "obj");
+        var statement = GetPropertySetterConditional(property, property.SecurityInfo.Read, "obj", fixedContentView);
         return (statement, setter);
     }
 
-    private (IEnumerable<string> conditionals, string setter) ModelToDtoFlattenedPropertySetter(FlattenedResponsePropertyViewModel property)
+    private (IEnumerable<string> conditionals, string setter) ModelToDtoFlattenedPropertySetter(FlattenedResponsePropertyViewModel property, string fixedContentView = null)
         => (
-            GetContentViewConditionals(property.DeclaringClass, property.ContentViews, property.ExcludedContentViews),
-            $"this.{property.Name} = {property.AccessExpression("obj")};");
+            fixedContentView is null
+                ? GetContentViewConditionals(property.DeclaringClass, property.ContentViews, property.ExcludedContentViews)
+                : [],
+            $"this.{ResponsePropertyName(property)} = {TransformResponseValue(property.Type, property.AccessExpression("obj"))};");
 
     private (IEnumerable<string> conditionals, string setter) ModelToSummaryDtoPropertySetter(SummaryPropertyViewModel property)
         => (
             GetContentViewConditionals(property.Parent, property.ContentViews, property.ExcludedContentViews),
-            $"this.{property.Name} = {property.AccessExpression("obj")};");
+            $"this.{ResponsePropertyName(property)} = {TransformResponseValue(property.Type, property.AccessExpression("obj"))};");
+
+    private bool ShouldEmitInBaseResponse(PropertyViewModel property)
+        => !Model.UseContentViewResponseTypes
+            || Model.GeneratedResponseContentViews.Count == 0
+            || Model.GeneratedResponseContentViews.Any(property.IsMappedForContentView);
+
+    private bool ShouldEmitInBaseResponse(FlattenedResponsePropertyViewModel property)
+        => !Model.UseContentViewResponseTypes
+            || Model.GeneratedResponseContentViews.Count == 0
+            || Model.GeneratedResponseContentViews.Any(property.IsMappedForContentView);
 
     private static IEnumerable<string> GetContentViewConditionals(
         ClassViewModel declaringClass,
@@ -708,25 +754,87 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         }
     }
 
-    private string ResponsePropertyType(PropertyViewModel property)
+    private string ResponsePropertyType(PropertyViewModel property, string fixedContentView = null)
     {
         if (property.UsesDtoReferenceSummary && property.Object is not null)
         {
             return $"{DtoNamespace}.{property.Object.SummaryDtoTypeName}";
         }
 
-        return property.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace);
+        var typeName = property.Type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace);
+        if (fixedContentView is not null && property.Object is not null)
+        {
+            typeName = typeName.Replace(property.Object.ResponseDtoTypeName, GetResponseDtoTypeName(property, fixedContentView));
+        }
+
+        return typeName;
     }
 
-    private string GetResponseDtoTypeName(PropertyViewModel property)
+    private string GetResponseDtoTypeName(PropertyViewModel property, string fixedContentView = null)
     {
         if (property.UsesDtoReferenceSummary && property.Object is not null)
         {
             return property.Object.SummaryDtoTypeName;
         }
 
+        if (property.Object is null)
+        {
+            return string.Empty;
+        }
+
+        if (fixedContentView is not null && property.Object.HasResponseDtoTypeForContentView(fixedContentView))
+        {
+            return property.Object.ResponseDtoTypeNameForContentView(fixedContentView);
+        }
+
         return property.Object.ResponseDtoTypeName;
     }
+
+    private string ResponsePropertyName(PropertyViewModel property)
+        => GetResponsePropertyName(property.Name, property.Type);
+
+    private string ResponsePropertyName(FlattenedResponsePropertyViewModel property)
+        => GetResponsePropertyName(property.Name, property.Type);
+
+    private string ResponsePropertyName(SummaryPropertyViewModel property)
+        => GetResponsePropertyName(property.Name, property.Type);
+
+    private string GetResponsePropertyName(string propertyName, TypeViewModel propertyType)
+    {
+        if (Model.ResponseDtoDateTimeMode != DtoDateTimeMode.Utc || !propertyType.IsDateTime)
+        {
+            return propertyName;
+        }
+
+        if (propertyName.EndsWith("UTC", StringComparison.Ordinal))
+        {
+            return propertyName;
+        }
+
+        if (propertyName.EndsWith("Utc", StringComparison.OrdinalIgnoreCase))
+        {
+            return propertyName[..^3] + "UTC";
+        }
+
+        return propertyName + "UTC";
+    }
+
+    private string TransformResponseValue(TypeViewModel type, string sourceExpression)
+    {
+        if (Model.ResponseDtoDateTimeMode != DtoDateTimeMode.Utc || !type.IsDateTime)
+        {
+            return sourceExpression;
+        }
+
+        return sourceExpression.Contains("?.", StringComparison.Ordinal) || type.IsReferenceOrNullableValue
+            ? $"{sourceExpression}?.ToUniversalTime()"
+            : $"{sourceExpression}.ToUniversalTime()";
+    }
+
+    private string GetGeneratedResponseDtoTypeName(ClassViewModel model, string contentView)
+        => contentView is not null && model.HasResponseDtoTypeForContentView(contentView)
+            ? model.ResponseDtoTypeNameForContentView(contentView)
+            : model.ResponseDtoTypeName;
 
     private static bool IsImmutableDictionary(TypeViewModel type) =>
         type.IsA(typeof(IImmutableDictionary<,>)) || type.IsA(typeof(ImmutableDictionary<,>));
@@ -761,27 +869,30 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
         return sourceExpression;
     }
 
-    private string DictionaryModelToDtoExpression(TypeViewModel type, string sourceExpression)
+    private string DictionaryModelToDtoExpression(TypeViewModel type, string sourceExpression, string fixedContentView = null)
     {
         var args = type.GenericArgumentsFor(typeof(IDictionary<,>))
             ?? throw new InvalidOperationException($"Dictionary type '{type}' is missing generic arguments.");
 
-        return $"{sourceExpression}?.ToDictionary(k => k.Key, v => {DictionaryValueModelToDtoExpression(args[1], "v.Value")})";
+        return $"{sourceExpression}?.ToDictionary(k => k.Key, v => {DictionaryValueModelToDtoExpression(args[1], "v.Value", fixedContentView)})";
     }
 
-    private string DictionaryValueModelToDtoExpression(TypeViewModel type, string sourceExpression)
+    private string DictionaryValueModelToDtoExpression(TypeViewModel type, string sourceExpression, string fixedContentView = null)
     {
         if (type.IsDictionary)
         {
-            return $"({type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)}){DictionaryModelToDtoExpression(type, sourceExpression)}";
+            return $"({type.NullableTypeForDto(isInput: false, dtoNamespace: DtoNamespace)}){DictionaryModelToDtoExpression(type, sourceExpression, fixedContentView)}";
         }
 
         var pureType = type.PureType;
         if (pureType.ClassViewModel is { } model)
         {
-            return $"{sourceExpression}.MapToDto<{model.FullyQualifiedName}, {model.ResponseDtoTypeName}>(context)";
+            var dtoTypeName = fixedContentView is not null && model.HasResponseDtoTypeForContentView(fixedContentView)
+                ? model.ResponseDtoTypeNameForContentView(fixedContentView)
+                : model.ResponseDtoTypeName;
+            return $"{sourceExpression}.MapToDto<{model.FullyQualifiedName}, {dtoTypeName}>(context)";
         }
 
-        return sourceExpression;
+        return TransformResponseValue(type, sourceExpression);
     }
 }

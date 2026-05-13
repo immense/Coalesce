@@ -582,6 +582,16 @@ export class ContentViewEntityApiClient extends ModelApiClient<$models.ContentVi
 }
 
 
+export class ContentViewEntityTagLinkApiClient extends ModelApiClient<$models.ContentViewEntityTagLink> {
+  constructor() { super($metadata.ContentViewEntityTagLink) }
+}
+
+
+export class ContentViewTagApiClient extends ModelApiClient<$models.ContentViewTag> {
+  constructor() { super($metadata.ContentViewTag) }
+}
+
+
 export class CourseApiClient extends ModelApiClient<$models.Course> {
   constructor() { super($metadata.Course) }
 }

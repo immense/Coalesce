@@ -15,6 +15,13 @@ public sealed class CoalesceAttribute : Attribute
     public string? ClientTypeName { get; set; }
 
     /// <summary>
+    /// When placed on a type, overrides the generated server-side response DTO class name.
+    /// For example, setting this to <c>GetTenantResponse</c> will cause Coalesce to generate
+    /// that response DTO class name instead of the default <c>TenantResponse</c>.
+    /// </summary>
+    public string? ResponseDtoClassName { get; set; }
+
+    /// <summary>
     /// When placed on a <see cref="Microsoft.EntityFrameworkCore.DbContext"/>, controls whether
     /// inherited non-Microsoft <see cref="Microsoft.EntityFrameworkCore.DbSet{TEntity}"/> properties
     /// are discovered alongside sets declared directly on the attributed context type.

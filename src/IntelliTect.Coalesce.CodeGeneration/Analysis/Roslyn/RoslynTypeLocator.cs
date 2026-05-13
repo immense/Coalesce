@@ -9,6 +9,7 @@ using IntelliTect.Coalesce.TypeDefinition;
 using IntelliTect.Coalesce.CodeGeneration.Analysis.Base;
 using Microsoft.VisualStudio.Web.CodeGeneration.Utils;
 using Microsoft.CodeAnalysis.CSharp;
+using System.Text.RegularExpressions;
 
 namespace IntelliTect.Coalesce.CodeGeneration.Analysis.Roslyn;
 
@@ -58,6 +59,11 @@ public class RoslynTypeLocator : TypeLocator
             .WithMetadataReferences(_projectContext.GetMetadataReferences())
             .GetCompilationAsync().Result;
 
+        _compilation = GeneratedContractCompilationAugmentor.AugmentWithSameProjectGeneratedContracts(
+            _compilation,
+            _projectContext.ProjectPath,
+            parseOptions);
+
         return _compilation;
     }
 
@@ -74,8 +80,40 @@ public class RoslynTypeLocator : TypeLocator
         ];
 
         return diagnostics
-            .Where(d => d.Severity == DiagnosticSeverity.Error && !ignored.Contains(d.Descriptor.Id))
+            .Where(d => d.Severity == DiagnosticSeverity.Error
+                && !ignored.Contains(d.Descriptor.Id)
+                && !IsLikelyMissingGeneratedApiSurfaceDiagnostic(d))
             .Select(d => d.ToString());
+    }
+
+    private static bool IsLikelyMissingGeneratedApiSurfaceDiagnostic(Diagnostic diagnostic)
+    {
+        if (diagnostic.Id is not ("CS0234" or "CS0246"))
+        {
+            return false;
+        }
+
+        var message = diagnostic.GetMessage();
+        var matches = Regex.Matches(message, "'([^']+)'");
+        if (matches.Count == 0)
+        {
+            return false;
+        }
+
+        static bool IsLikelyGeneratedSurfaceName(string candidate)
+            => candidate.EndsWith("Response", StringComparison.Ordinal)
+                || candidate.EndsWith("Parameter", StringComparison.Ordinal)
+                || candidate.EndsWith("Controller", StringComparison.Ordinal);
+
+        var missingName = matches
+            .Select(match => match.Groups[1].Value)
+            .FirstOrDefault(IsLikelyGeneratedSurfaceName);
+        if (string.IsNullOrWhiteSpace(missingName))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private List<INamedTypeSymbol> _allTypes;

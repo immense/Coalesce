@@ -121,4 +121,43 @@ public class GeneratedContractShapeGenerationTests : CodeGenTestBase
             [CSharpSyntaxTree.ParseText(SourceText.From(contents), path: "GeneratedContractShapeProjectionSpec.g.cs")],
             assertSuccess: true);
     }
+
+    [Test]
+    public async Task GeneratedContracts_PropagateSelectedPropertyAttributesToClassOutputs()
+    {
+        var executor = BuildExecutor();
+        var generatorServices = executor.ServiceProvider.GetRequiredService<GeneratorServices>();
+
+        var compilation = ReflectionRepositoryFactory.GetCompilation(ReflectionRepositoryFactory.ModelSyntaxTrees);
+        var sourceType = compilation.GetTypeByMetadataName(
+            "IntelliTect.Coalesce.Testing.TargetClasses.TestDbContext.GeneratedContractShapeAttributeSource");
+        await Assert.That(sourceType).IsNotNull();
+        var shapeSourceType = sourceType!;
+
+        var getShapes = typeof(GeneratedContracts)
+            .GetMethod("GetShapes", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var resolveProperties = typeof(GeneratedContracts)
+            .GetMethod("ResolveProperties", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var shape = ((IEnumerable<GeneratedContracts.ContractShape>)getShapes.Invoke(null, [shapeSourceType])!)
+            .Single(candidate => candidate.TypeName == "GeneratedContractShapeAttributeSpec");
+
+        var properties = (IReadOnlyList<GeneratedContracts.ContractPropertyModel>)resolveProperties.Invoke(null, [shapeSourceType, shape])!;
+        var file = new GeneratedContractFile(generatorServices)
+        {
+            Model = new GeneratedContracts.GeneratedContractFileModel(
+                shape,
+                properties,
+                shapeSourceType.ToDisplayString(SymbolTypeViewModel.DefaultDisplayFormat)),
+        };
+
+        var contents = await file.BuildOutputAsync();
+
+        await Assert.That(contents.Contains("[global::IntelliTect.Coalesce.Testing.TargetClasses.TestDbContext.GeneratedContractShapeMirrorAttribute(\"tenant-name\", Enabled = true)]")).IsTrue();
+        await Assert.That(contents.Contains("public required string Name { get; set; }")).IsTrue();
+
+        ReflectionRepositoryFactory.GetCompilation(
+            [CSharpSyntaxTree.ParseText(SourceText.From(contents), path: "GeneratedContractShapeAttributeSpec.g.cs")],
+            assertSuccess: true);
+    }
 }

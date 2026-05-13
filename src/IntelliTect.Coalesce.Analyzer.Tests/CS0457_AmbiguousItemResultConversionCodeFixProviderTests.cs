@@ -1,5 +1,4 @@
 using Microsoft.CodeAnalysis.Testing;
-using IntelliTect.Coalesce.Analyzer.Fixers;
 
 namespace IntelliTect.Coalesce.Analyzer.Tests;
 

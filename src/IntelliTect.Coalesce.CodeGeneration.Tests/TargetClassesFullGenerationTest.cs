@@ -141,9 +141,13 @@ public class TargetClassesFullGenerationTest(VueSuiteFixture fixture) : CodeGenT
             .AddCoalesce(c =>
             {
                 c.AddContext<AppDbContext>();
+                c.AddContext<CompanyOnlyDbContext>();
+                c.AddContext<FluentMetadataDbContext>();
             })
             .AddSingleton<IWebHostEnvironment>(Mock.Of<IWebHostEnvironment>())
             .AddScoped<AppDbContext>() // good enough (doesn't need to be configured, just needs to exist)
+            .AddScoped<CompanyOnlyDbContext>() // good enough (doesn't need to be configured, just needs to exist)
+            .AddScoped<FluentMetadataDbContext>() // good enough (doesn't need to be configured, just needs to exist)
             .BuildServiceProvider();
 
         var reflectionData = CoalesceApplicationBuilderExtensions.GetSecurityOverviewData(

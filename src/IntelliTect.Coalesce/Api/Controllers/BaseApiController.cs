@@ -65,6 +65,13 @@ public abstract class BaseApiController : Controller
         return parameters;
     }
 
+    protected static TParameters ApplyFixedIncludes<TParameters>(TParameters parameters, string? includes)
+        where TParameters : DataSourceParameters
+    {
+        parameters.Includes = includes;
+        return parameters;
+    }
+
     protected ActionResult File(IFile _methodResult)
     {
         string? _contentType = _methodResult.ContentType;
@@ -106,13 +113,21 @@ public abstract class BaseApiController<T, TDtoIn, TDtoOut> : BaseApiController
     protected ClassViewModel EntityClassViewModel { get; }
 
     protected Task<ItemResult<TDtoOut>> GetImplementation(object id, DataSourceParameters parameters, IDataSource<T> dataSource)
+        => GetImplementation<TDtoOut>(id, parameters, dataSource);
+
+    protected Task<ItemResult<TDto>> GetImplementation<TDto>(object id, DataSourceParameters parameters, IDataSource<T> dataSource)
+        where TDto : class, IResponseDto<T>, new()
     {
-        return dataSource.GetMappedItemAsync<TDtoOut>(id, parameters);
+        return dataSource.GetMappedItemAsync<TDto>(id, parameters);
     }
 
     protected Task<ListResult<TDtoOut>> ListImplementation(ListParameters listParameters, IDataSource<T> dataSource)
+        => ListImplementation<TDtoOut>(listParameters, dataSource);
+
+    protected Task<ListResult<TDto>> ListImplementation<TDto>(ListParameters listParameters, IDataSource<T> dataSource)
+        where TDto : class, IResponseDto<T>, new()
     {
-        return dataSource.GetMappedListAsync<TDtoOut>(listParameters);
+        return dataSource.GetMappedListAsync<TDto>(listParameters);
     }
 
     protected Task<ItemResult<int>> CountImplementation(FilterParameters parameters, IDataSource<T> dataSource)
@@ -120,7 +135,11 @@ public abstract class BaseApiController<T, TDtoIn, TDtoOut> : BaseApiController
         return dataSource.GetCountAsync(parameters);
     }
 
-    protected async Task<ItemResult<TDtoOut?>> SaveImplementation(TDtoIn dto, DataSourceParameters parameters, IDataSource<T> dataSource, IBehaviors<T> behaviors)
+    protected Task<ItemResult<TDtoOut?>> SaveImplementation(TDtoIn dto, DataSourceParameters parameters, IDataSource<T> dataSource, IBehaviors<T> behaviors)
+        => SaveImplementation<TDtoOut>(dto, parameters, dataSource, behaviors);
+
+    protected async Task<ItemResult<TDto?>> SaveImplementation<TDto>(TDtoIn dto, DataSourceParameters parameters, IDataSource<T> dataSource, IBehaviors<T> behaviors)
+        where TDto : class, IResponseDto<T>, new()
     {
         var kind = (await behaviors.DetermineSaveKindAsync(dto, dataSource, parameters)).Kind;
 
@@ -145,12 +164,16 @@ public abstract class BaseApiController<T, TDtoIn, TDtoOut> : BaseApiController
             return $"Editing of {GeneratedForClassViewModel.DisplayName} items not allowed.";
         }
 
-        return await behaviors.SaveAsync<TDtoIn, TDtoOut>(dto, dataSource, parameters);
+        return await behaviors.SaveAsync<TDtoIn, TDto>(dto, dataSource, parameters);
     }
 
     protected Task<ItemResult<TDtoOut?>> DeleteImplementation(object id, DataSourceParameters parameters, IDataSource<T> dataSource, IBehaviors<T> behaviors)
+        => DeleteImplementation<TDtoOut>(id, parameters, dataSource, behaviors);
+
+    protected Task<ItemResult<TDto?>> DeleteImplementation<TDto>(object id, DataSourceParameters parameters, IDataSource<T> dataSource, IBehaviors<T> behaviors)
+        where TDto : class, IResponseDto<T>, new()
     {
-        return behaviors.DeleteAsync<TDtoOut>(id, dataSource, parameters);
+        return behaviors.DeleteAsync<TDto>(id, dataSource, parameters);
     }
 }
 
@@ -171,13 +194,23 @@ public abstract class BaseApiController<T, TDtoIn, TDtoOut, TContext> : BaseApiC
 
     public TContext Db => Context.DbContext;
 
-    protected async Task<ItemResult<TDtoOut>> BulkSaveImplementation(
+    protected Task<ItemResult<TDtoOut>> BulkSaveImplementation(
         BulkSaveRequest dto,
         DataSourceParameters parameters,
         IDataSource<T> rootDataSource,
         IDataSourceFactory dataSourceFactory,
         IBehaviorsFactory behaviorsFactory
     )
+        => BulkSaveImplementation<TDtoOut>(dto, parameters, rootDataSource, dataSourceFactory, behaviorsFactory);
+
+    protected async Task<ItemResult<TDto>> BulkSaveImplementation<TDto>(
+        BulkSaveRequest dto,
+        DataSourceParameters parameters,
+        IDataSource<T> rootDataSource,
+        IDataSourceFactory dataSourceFactory,
+        IBehaviorsFactory behaviorsFactory
+    )
+        where TDto : class, IResponseDto<T>, new()
     {
         if (dto is null && HttpContext.RequestServices.GetService(typeof(IJsonHelper))?.GetType().Name.Contains("Newtonsoft") == true)
         {
@@ -190,7 +223,7 @@ public abstract class BaseApiController<T, TDtoIn, TDtoOut, TContext> : BaseApiC
         }
 
         var strategy = Db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<ItemResult<TDtoOut>>(async () =>
+        return await strategy.ExecuteAsync<ItemResult<TDto>>(async () =>
         {
             using var tran = await Db.Database.BeginTransactionAsync();
 
@@ -343,7 +376,7 @@ public abstract class BaseApiController<T, TDtoIn, TDtoOut, TContext> : BaseApiC
                 else
                 {
                     // Read security is implemented by the generated controller action.
-                    var rootResult = await GetImplementation(root.PrimaryKey, parameters, rootDataSource);
+                    var rootResult = await GetImplementation<TDto>(root.PrimaryKey, parameters, rootDataSource);
 
                     await tran.CommitAsync();
 

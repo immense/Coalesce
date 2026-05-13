@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -102,7 +103,7 @@ public class CodeGenTestBase
     private static ProcessStartInfo GetShellExecStartInfo(string program, IEnumerable<string> args, string workingDirectory = null)
     {
         var arguments = args.ToList();
-        var exeToRun = program;
+        var exeToRun = ResolveExecutablePath(program);
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             // On Windows, the node executable is a .cmd file, so it can't be executed
@@ -118,9 +119,52 @@ public class CodeGenTestBase
             WorkingDirectory = workingDirectory,
             WindowStyle = ProcessWindowStyle.Hidden
         };
+        start.Environment["PATH"] = string.Join(
+            Path.PathSeparator,
+            new[]
+            {
+                Path.GetDirectoryName(ResolveExecutablePath("node")),
+                Path.GetDirectoryName(ResolveExecutablePath("npm")),
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "/usr/bin",
+                start.Environment.TryGetValue("PATH", out var existingPath) ? existingPath : Environment.GetEnvironmentVariable("PATH"),
+            }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct()
+        );
         foreach (var arg in arguments) start.ArgumentList.Add(arg);
 
         return start;
+    }
+
+    private static string ResolveExecutablePath(string program)
+    {
+        if (Path.IsPathRooted(program) || program.Contains(Path.DirectorySeparatorChar) || program.Contains(Path.AltDirectorySeparatorChar))
+        {
+            return program;
+        }
+
+        var pathEntries = (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var candidate in pathEntries
+            .Concat(new[]
+            {
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "/usr/bin",
+            })
+            .Distinct())
+        {
+            var fullPath = Path.Combine(candidate, program);
+            if (System.IO.File.Exists(fullPath))
+            {
+                return fullPath;
+            }
+        }
+
+        return program;
     }
 
     protected static async Task AssertTypescriptProjectCompiles(
@@ -129,20 +173,31 @@ public class CodeGenTestBase
         string tsVersion
     )
     {
-        var tsPath = Path.GetFullPath("./ts" + tsVersion);
-        await Process
-            .Start(GetShellExecStartInfo("npm", new[] { "i", "typescript@" + tsVersion, "--prefix", tsPath }))
-            .WaitForExitAsync();
+        var targetFramework = Path.GetFileName(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var tsPath = Path.Combine(Path.GetTempPath(), "coalesce-ts-tests", targetFramework, "ts" + tsVersion);
+        if (Directory.Exists(tsPath)) Directory.Delete(tsPath, recursive: true);
+        Directory.CreateDirectory(tsPath);
+
+        using var npmInstall = Process.Start(GetShellExecStartInfo("npm", new[] { "i", "typescript@" + tsVersion, "--prefix", tsPath }, tsPath))
+            ?? throw new InvalidOperationException("Failed to start npm.");
+        await npmInstall.WaitForExitAsync();
+        await Assert.That(npmInstall.ExitCode).IsEqualTo(0);
+
+        var effectiveWorkingDirectory = Directory.Exists(workingDirectory)
+            ? workingDirectory
+            : Path.GetDirectoryName(tsConfigPath) ?? tsPath;
+        Directory.CreateDirectory(effectiveWorkingDirectory);
 
         var start = GetShellExecStartInfo(
-            $"{tsPath}/node_modules/.bin/tsc",
+            ResolveExecutablePath("node"),
             new List<string>
             {
+                Path.Combine(tsPath, "node_modules", "typescript", "bin", "tsc"),
                 "--project",
                 tsConfigPath,
                 "--noEmit"
             },
-            workingDirectory
+            effectiveWorkingDirectory
         );
         start.RedirectStandardOutput = true;
         start.RedirectStandardError = true;
@@ -172,16 +227,36 @@ public class CodeGenTestBase
             .Because(string.Join("\n\n", streams));
     }
 
-    public static DirectoryInfo GetRepoRoot()
+    public static DirectoryInfo GetRepoRoot([CallerFilePath] string sourceFilePath = null)
     {
-        return
-            // Normal usage (e.g. executing out of a /bin folder
-            new DirectoryInfo(Directory.GetCurrentDirectory())
-                .FindFileInAncestorDirectory("Coalesce.slnx")
-                ?.Directory
-        ??
-            // For Live Unit Testing, which makes a copy of the whole repo elsewhere.
-            new DirectoryInfo(Directory.GetCurrentDirectory())
-                .FindDirectoryInAncestorDirectory("b");
+        DirectoryInfo FindRepoRoot(DirectoryInfo start)
+        {
+            if (start is null || !start.Exists) return null;
+
+            return start.FindFileInAncestorDirectory("Coalesce.slnx")?.Directory
+                ?? start.FindDirectoryInAncestorDirectory("b");
+        }
+
+        var candidateRoots = new[]
+        {
+            AppContext.BaseDirectory,
+            Path.GetDirectoryName(typeof(CodeGenTestBase).Assembly.Location),
+            Directory.GetCurrentDirectory(),
+            sourceFilePath is null ? null : Path.GetDirectoryName(sourceFilePath),
+        }
+        .Where(path => !string.IsNullOrWhiteSpace(path))
+        .Select(path => new DirectoryInfo(path!))
+        .DistinctBy(path => path.FullName);
+
+        foreach (var candidateRoot in candidateRoots)
+        {
+            var repoRoot = FindRepoRoot(candidateRoot);
+            if (repoRoot is not null)
+            {
+                return repoRoot;
+            }
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the Coalesce repo root.");
     }
 }

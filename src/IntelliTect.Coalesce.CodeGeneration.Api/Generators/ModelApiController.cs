@@ -55,6 +55,17 @@ public class ModelApiController : ApiController
         string defaultSaveIncludes = DefaultIncludesLiteral(Model.DefaultSaveDtoIncludes);
         string defaultBulkSaveIncludes = DefaultIncludesLiteral(Model.DefaultBulkSaveDtoIncludes);
         string defaultDeleteIncludes = DefaultIncludesLiteral(Model.DefaultDeleteDtoIncludes);
+        string getResponseType = Model.GetStandardActionResponseDtoTypeName(Model.DefaultGetDtoIncludes);
+        string listResponseType = Model.GetStandardActionResponseDtoTypeName(Model.DefaultListDtoIncludes);
+        string saveResponseType = Model.GetStandardActionResponseDtoTypeName(Model.DefaultSaveDtoIncludes);
+        string bulkSaveResponseType = Model.GetStandardActionResponseDtoTypeName(Model.DefaultBulkSaveDtoIncludes);
+        string deleteResponseType = Model.GetStandardActionResponseDtoTypeName(Model.DefaultDeleteDtoIncludes);
+        bool fixGetIncludes = Model.ShouldUseContentViewResponseType(Model.DefaultGetDtoIncludes);
+        bool fixListIncludes = Model.ShouldUseContentViewResponseType(Model.DefaultListDtoIncludes);
+        bool fixCountIncludes = Model.ShouldUseContentViewResponseType(Model.DefaultCountDtoIncludes);
+        bool fixSaveIncludes = Model.ShouldUseContentViewResponseType(Model.DefaultSaveDtoIncludes);
+        bool fixBulkSaveIncludes = Model.ShouldUseContentViewResponseType(Model.DefaultBulkSaveDtoIncludes);
+        bool fixDeleteIncludes = Model.ShouldUseContentViewResponseType(Model.DefaultDeleteDtoIncludes);
 #pragma warning disable CS0618 // Type or member is obsolete
         var accessModifier = Model.ApiActionAccessModifier;
 #pragma warning restore CS0618 // Type or member is obsolete
@@ -80,20 +91,20 @@ public class ModelApiController : ApiController
             b.Line();
             b.Line("""[HttpGet("get/{id}")]""");
             b.Line($"{securityInfo.Read.MvcAnnotation()}");
-            b.Line($"{accessModifier} virtual Task<ItemResult<{Model.ResponseDtoTypeName}>> Get(");
+            b.Line($"{accessModifier} virtual Task<ItemResult<{getResponseType}>> Get(");
             b.Indented($"{primaryKeyParameter},");
             b.Indented($"[FromQuery] DataSourceParameters parameters,");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> GetImplementation(id, ApplyDefaultIncludes(parameters, {defaultGetIncludes}), dataSource);");
+            b.Indented($"=> GetImplementation<{getResponseType}>(id, {(fixGetIncludes ? "ApplyFixedIncludes" : "ApplyDefaultIncludes")}(parameters, {defaultGetIncludes}), dataSource);");
 
             // ENDPOINT: /list
             b.Line();
             b.Line("""[HttpGet("list")]""");
             b.Line($"{securityInfo.Read.MvcAnnotation()}");
-            b.Line($"{accessModifier} virtual Task<ListResult<{Model.ResponseDtoTypeName}>> List(");
+            b.Line($"{accessModifier} virtual Task<ListResult<{listResponseType}>> List(");
             b.Indented($"[FromQuery] ListParameters parameters,");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> ListImplementation(ApplyDefaultIncludes(parameters, {defaultListIncludes}), dataSource);");
+            b.Indented($"=> ListImplementation<{listResponseType}>({(fixListIncludes ? "ApplyFixedIncludes" : "ApplyDefaultIncludes")}(parameters, {defaultListIncludes}), dataSource);");
 
             // ENDPOINT: /count
             b.Line();
@@ -102,7 +113,7 @@ public class ModelApiController : ApiController
             b.Line($"{accessModifier} virtual Task<ItemResult<int>> Count(");
             b.Indented($"[FromQuery] FilterParameters parameters,");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> CountImplementation(ApplyDefaultIncludes(parameters, {defaultCountIncludes}), dataSource);");
+            b.Indented($"=> CountImplementation({(fixCountIncludes ? "ApplyFixedIncludes" : "ApplyDefaultIncludes")}(parameters, {defaultCountIncludes}), dataSource);");
         }
 
         if (securityInfo.Save.IsAllowed())
@@ -112,23 +123,23 @@ public class ModelApiController : ApiController
             b.Line("""[HttpPost("save")]""");
             b.Line("""[Consumes("application/x-www-form-urlencoded", "multipart/form-data")]""");
             b.Line($"{securityInfo.Save.MvcAnnotation()}");
-            b.Line($"{accessModifier} virtual Task<ItemResult<{Model.ResponseDtoTypeName}>> Save(");
+            b.Line($"{accessModifier} virtual Task<ItemResult<{saveResponseType}>> Save(");
             b.Indented($"[FromForm] {Model.ParameterDtoTypeName} dto,");
             b.Indented($"[FromQuery] DataSourceParameters parameters,");
             b.Indented($"{dataSourceParameter},");
             b.Indented($"{behaviorsParameter})");
-            b.Indented($"=> SaveImplementation(dto, ApplyDefaultIncludes(parameters, {defaultSaveIncludes}), dataSource, behaviors);");
+            b.Indented($"=> SaveImplementation<{saveResponseType}>(dto, {(fixSaveIncludes ? "ApplyFixedIncludes" : "ApplyDefaultIncludes")}(parameters, {defaultSaveIncludes}), dataSource, behaviors);");
 
             b.Line();
             b.Line("""[HttpPost("save")]""");
             b.Line("""[Consumes("application/json")]""");
             b.Line($"{securityInfo.Save.MvcAnnotation()}");
-            b.Line($"{accessModifier} virtual Task<ItemResult<{Model.ResponseDtoTypeName}>> SaveFromJson(");
+            b.Line($"{accessModifier} virtual Task<ItemResult<{saveResponseType}>> SaveFromJson(");
             b.Indented($"[FromBody] {Model.ParameterDtoTypeName} dto,");
             b.Indented($"[FromQuery] DataSourceParameters parameters,");
             b.Indented($"{dataSourceParameter},");
             b.Indented($"{behaviorsParameter})");
-            b.Indented($"=> SaveImplementation(dto, ApplyDefaultIncludes(parameters, {defaultSaveIncludes}), dataSource, behaviors);");
+            b.Indented($"=> SaveImplementation<{saveResponseType}>(dto, {(fixSaveIncludes ? "ApplyFixedIncludes" : "ApplyDefaultIncludes")}(parameters, {defaultSaveIncludes}), dataSource, behaviors);");
         }
 
         if (Model.DbContext != null && securityInfo.IsReadAllowed() && (securityInfo.Save.IsAllowed() || securityInfo.IsDeleteAllowed()))
@@ -141,13 +152,13 @@ public class ModelApiController : ApiController
             b.Line();
             b.Line("[HttpPost(\"bulkSave\")]");
             b.Line($"{securityInfo.Read.MvcAnnotation()}");
-            b.Line($"{accessModifier} virtual Task<ItemResult<{Model.ResponseDtoTypeName}>> BulkSave(");
+            b.Line($"{accessModifier} virtual Task<ItemResult<{bulkSaveResponseType}>> BulkSave(");
             b.Indented($"[FromBody] BulkSaveRequest dto,");
             b.Indented($"[FromQuery] DataSourceParameters parameters,");
             b.Indented($"{dataSourceParameter},");
             b.Indented($"[FromServices] IDataSourceFactory dataSourceFactory,");
             b.Indented($"[FromServices] IBehaviorsFactory behaviorsFactory)");
-            b.Indented($"=> BulkSaveImplementation(dto, ApplyDefaultIncludes(parameters, {defaultBulkSaveIncludes}), dataSource, dataSourceFactory, behaviorsFactory);");
+            b.Indented($"=> BulkSaveImplementation<{bulkSaveResponseType}>(dto, {(fixBulkSaveIncludes ? "ApplyFixedIncludes" : "ApplyDefaultIncludes")}(parameters, {defaultBulkSaveIncludes}), dataSource, dataSourceFactory, behaviorsFactory);");
         }
 
         if (securityInfo.IsDeleteAllowed())
@@ -156,11 +167,11 @@ public class ModelApiController : ApiController
             b.Line();
             b.Line("[HttpPost(\"delete/{id}\")]");
             b.Line($"{securityInfo.Delete.MvcAnnotation()}");
-            b.Line($"{accessModifier} virtual Task<ItemResult<{Model.ResponseDtoTypeName}>> Delete(");
+            b.Line($"{accessModifier} virtual Task<ItemResult<{deleteResponseType}>> Delete(");
             b.Indented($"{primaryKeyParameter},");
             b.Indented($"{behaviorsParameter},");
             b.Indented($"{dataSourceParameter})");
-            b.Indented($"=> DeleteImplementation(id, ApplyDefaultIncludes(new DataSourceParameters(), {defaultDeleteIncludes}), dataSource, behaviors);");
+            b.Indented($"=> DeleteImplementation<{deleteResponseType}>(id, {(fixDeleteIncludes ? "ApplyFixedIncludes" : "ApplyDefaultIncludes")}(new DataSourceParameters(), {defaultDeleteIncludes}), dataSource, behaviors);");
         }
 
         if (Model.ClientMethods.Any())

@@ -28,6 +28,7 @@ public sealed class GeneratedContractShapeAttribute : Attribute
     public string[] Members { get; init; } = [];
     public string[] ExcludedMembers { get; init; } = [];
     public string[] Implements { get; init; } = [];
+    public Type[] IncludedPropertyAttributes { get; init; } = [];
     public bool SettableProperties { get; init; }
     public GeneratedContractNullabilityTransform NullabilityTransform { get; init; }
 }
