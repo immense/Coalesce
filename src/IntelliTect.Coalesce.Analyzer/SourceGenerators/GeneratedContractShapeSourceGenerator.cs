@@ -96,8 +96,14 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
                 return;
             }
 
+            // Convention default: TargetAssemblyName = the SOURCE class's assembly.
+            // Without this, a *ContractSource in a referenced assembly would emit its
+            // contract in every project that sees it (duplicate type definitions).
+            var sourceAssembly = NormalizeAssemblyName(
+                sourceType.ContainingAssembly?.Name ?? targetAssemblyName);
+
             foreach (var shape in GetShapes(sourceType)
-                .Select(shape => ResolveConventions(shape, sourceType, targetAssemblyName))
+                .Select(shape => ResolveConventions(shape, sourceType, sourceAssembly))
                 .Where(shape => string.Equals(
                     NormalizeAssemblyName(shape.TargetAssemblyName),
                     targetAssemblyName,
@@ -234,11 +240,23 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             resolvedNamespace = sourceType.ContainingNamespace.IsGlobalNamespace
                 ? string.Empty
                 : sourceType.ContainingNamespace.ToDisplayString();
+            // Strip ".GeneratedSources" suffix - source classes are placed in this
+            // sub-namespace by convention, but generated types belong in the parent.
+            const string generatedSourcesSuffix = ".GeneratedSources";
+            if (resolvedNamespace.EndsWith(generatedSourcesSuffix, StringComparison.Ordinal))
+            {
+                resolvedNamespace = resolvedNamespace.Substring(0, resolvedNamespace.Length - generatedSourcesSuffix.Length);
+            }
         }
 
         if (string.IsNullOrEmpty(resolvedTypeName))
         {
             resolvedTypeName = InferTypeName(sourceType.Name);
+            // For Interface output kind, prepend "I" if not already present
+            if (shape.OutputKind == InterfaceOutputKind && !resolvedTypeName.StartsWith("I", StringComparison.Ordinal))
+            {
+                resolvedTypeName = "I" + resolvedTypeName;
+            }
         }
 
         // If nothing changed, return original to avoid allocations
@@ -427,9 +445,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         => !property.IsStatic
            && property.Parameters.Length == 0
            && property.DeclaredAccessibility == Accessibility.Public
-           && property.GetMethod?.DeclaredAccessibility == Accessibility.Public
-           && property.SetMethod?.DeclaredAccessibility == Accessibility.Public
-           && IsScalarLikeType(property.Type);
+           && property.GetMethod?.DeclaredAccessibility == Accessibility.Public;
 
     private static IPropertySymbol? FindProperty(INamedTypeSymbol type, string memberName)
     {
@@ -657,11 +673,12 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         builder.AppendLine("    }");
         builder.AppendLine();
 
-        // All-args constructor
+        // All-args constructor — annotate with [SetsRequiredMembers] so it can satisfy required properties.
         var parameters = model.Properties
             .Select(p => new { TypeName = GetTypeName(p), p.Name })
             .ToArray();
 
+        builder.AppendLine("    [global::System.Diagnostics.CodeAnalysis.SetsRequiredMembers]");
         builder.Append("    public ").Append(model.Shape.TypeName).Append('(');
         for (var i = 0; i < parameters.Length; i++)
         {

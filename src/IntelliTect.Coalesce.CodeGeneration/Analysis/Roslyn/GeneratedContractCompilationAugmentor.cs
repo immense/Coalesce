@@ -37,7 +37,12 @@ internal static class GeneratedContractCompilationAugmentor
 
         foreach (var sourceType in GetCandidateTypes(compilation))
         {
+            // Convention default: TargetAssemblyName = the SOURCE class's assembly.
+            var sourceAssembly = NormalizeAssemblyName(
+                sourceType.ContainingAssembly?.Name ?? targetAssemblyName);
+
             var shapes = GeneratedContracts.GetShapes(sourceType)
+                .Select(shape => GeneratedContracts.ResolveConventions(shape, sourceType, sourceAssembly))
                 .Where(shape => ShouldAugmentShape(sourceType, shape))
                 .Where(shape => string.Equals(
                     NormalizeAssemblyName(shape.TargetAssemblyName),

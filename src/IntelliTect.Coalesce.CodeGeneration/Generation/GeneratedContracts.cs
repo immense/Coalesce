@@ -52,7 +52,8 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
 
         foreach (var sourceType in discoveredTypes)
         {
-            foreach (var shape in GetShapes(sourceType))
+            var sourceAssemblyName = sourceType.ContainingAssembly?.Name ?? string.Empty;
+            foreach (var shape in GetShapes(sourceType).Select(s => ResolveConventions(s, sourceType, sourceAssemblyName)))
             {
                 var projectDirectory = ResolveProjectDirectory(projectLookup, shape, sourceType);
                 var typeKey = $"{shape.TargetNamespace}.{shape.TypeName}";
@@ -203,27 +204,118 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
 
     private static ContractShape? ParseShape(AttributeData attribute)
     {
-        if (attribute.ConstructorArguments.Length < 5)
+        if (attribute.ConstructorArguments.Length < 1)
         {
             return null;
         }
 
+        string shapeName;
+        int outputKind;
+        string targetAssemblyName;
+        string targetNamespace;
+        string typeName;
+
+        if (attribute.ConstructorArguments.Length >= 5)
+        {
+            // Full 5-arg constructor: shapeName, outputKind, assembly, namespace, typeName
+            shapeName = (string?)attribute.ConstructorArguments[0].Value ?? string.Empty;
+            outputKind = Convert.ToInt32(attribute.ConstructorArguments[1].Value);
+            targetAssemblyName = (string?)attribute.ConstructorArguments[2].Value ?? string.Empty;
+            targetNamespace = (string?)attribute.ConstructorArguments[3].Value ?? string.Empty;
+            typeName = (string?)attribute.ConstructorArguments[4].Value ?? string.Empty;
+        }
+        else if (attribute.ConstructorArguments.Length == 1)
+        {
+            // Simplified 1-arg constructor: shapeName only.
+            // Empty strings for assembly/namespace/typeName get resolved via ResolveConventions.
+            shapeName = (string?)attribute.ConstructorArguments[0].Value ?? string.Empty;
+            outputKind = GetInt(attribute, "OutputKind", ClassOutputKind);
+            targetAssemblyName = string.Empty;
+            targetNamespace = string.Empty;
+            typeName = string.Empty;
+        }
+        else
+        {
+            return null;
+        }
+
+        // For the 1-arg constructor, default policy is PublicScalarProperties unless explicitly overridden.
+        var isSimplifiedForm = attribute.ConstructorArguments.Length == 1;
+        var defaultPolicy = isSimplifiedForm ? PublicScalarPropertiesPolicy : ExplicitPolicy;
+
         return new ContractShape(
-            (string?)attribute.ConstructorArguments[0].Value ?? string.Empty,
-            Convert.ToInt32(attribute.ConstructorArguments[1].Value),
-            (string?)attribute.ConstructorArguments[2].Value ?? string.Empty,
-            (string?)attribute.ConstructorArguments[3].Value ?? string.Empty,
-            (string?)attribute.ConstructorArguments[4].Value ?? string.Empty,
-            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Policy)),
+            shapeName,
+            outputKind,
+            targetAssemblyName,
+            targetNamespace,
+            typeName,
+            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Policy), defaultPolicy),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Members)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.ExcludedMembers)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Implements)),
             GetTypeArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.IncludedPropertyAttributes)),
             GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.SettableProperties)),
-            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)));
+            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)),
+            GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.GenerateConstructors), defaultValue: isSimplifiedForm));
     }
 
-    private static int GetInt(AttributeData attribute, string name)
+    /// <summary>
+    /// Resolves convention-based defaults for shapes that used the simplified 1-arg constructor.
+    /// Empty strings in TargetAssemblyName/TargetNamespace/TypeName are filled from the source type context.
+    /// </summary>
+    internal static ContractShape ResolveConventions(ContractShape shape, INamedTypeSymbol sourceType, string compilationAssemblyName)
+    {
+        var resolvedAssembly = shape.TargetAssemblyName;
+        var resolvedNamespace = shape.TargetNamespace;
+        var resolvedTypeName = shape.TypeName;
+
+        if (string.IsNullOrEmpty(resolvedAssembly))
+        {
+            resolvedAssembly = compilationAssemblyName;
+        }
+
+        if (string.IsNullOrEmpty(resolvedNamespace))
+        {
+            resolvedNamespace = sourceType.ContainingNamespace.IsGlobalNamespace
+                ? string.Empty
+                : sourceType.ContainingNamespace.ToDisplayString();
+        }
+
+        if (string.IsNullOrEmpty(resolvedTypeName))
+        {
+            resolvedTypeName = InferTypeName(sourceType.Name);
+        }
+
+        if (resolvedAssembly == shape.TargetAssemblyName
+            && resolvedNamespace == shape.TargetNamespace
+            && resolvedTypeName == shape.TypeName)
+        {
+            return shape;
+        }
+
+        return shape with
+        {
+            TargetAssemblyName = resolvedAssembly,
+            TargetNamespace = resolvedNamespace,
+            TypeName = resolvedTypeName,
+        };
+    }
+
+    internal static string InferTypeName(string sourceClassName)
+    {
+        var suffixes = new[] { "ContractSource", "Source" };
+        foreach (var suffix in suffixes)
+        {
+            if (sourceClassName.EndsWith(suffix, StringComparison.Ordinal) && sourceClassName.Length > suffix.Length)
+            {
+                return sourceClassName.Substring(0, sourceClassName.Length - suffix.Length);
+            }
+        }
+
+        return sourceClassName;
+    }
+
+    private static int GetInt(AttributeData attribute, string name, int defaultValue = 0)
     {
         foreach (var argument in attribute.NamedArguments)
         {
@@ -233,7 +325,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             }
         }
 
-        return 0;
+        return defaultValue;
     }
 
     private static IReadOnlyList<string> GetStringArray(AttributeData attribute, string name)
@@ -272,7 +364,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         return [];
     }
 
-    private static bool GetBool(AttributeData attribute, string name)
+    private static bool GetBool(AttributeData attribute, string name, bool defaultValue = false)
     {
         foreach (var argument in attribute.NamedArguments)
         {
@@ -282,7 +374,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             }
         }
 
-        return false;
+        return defaultValue;
     }
 
     private static string? GetString(AttributeData attribute, string name)
@@ -378,9 +470,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         => !property.IsStatic
            && property.Parameters.Length == 0
            && property.DeclaredAccessibility == Accessibility.Public
-           && property.GetMethod?.DeclaredAccessibility == Accessibility.Public
-           && property.SetMethod?.DeclaredAccessibility == Accessibility.Public
-           && IsScalarLikeType(property.Type);
+           && property.GetMethod?.DeclaredAccessibility == Accessibility.Public;
 
     private static IPropertySymbol? FindProperty(INamedTypeSymbol type, string memberName)
     {
@@ -560,6 +650,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         public static Type[] IncludedPropertyAttributes { get; set; } = [];
         public static bool SettableProperties { get; set; }
         public static int NullabilityTransform { get; set; }
+        public static bool GenerateConstructors { get; set; }
     }
 
     internal sealed record ContractShape(
@@ -574,7 +665,8 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         IReadOnlyList<string> Implements,
         IReadOnlyList<string> IncludedPropertyAttributes,
         bool SettableProperties,
-        int NullabilityTransform);
+        int NullabilityTransform,
+        bool GenerateConstructors = false);
 
     internal sealed record GeneratedContractFileModel(
         ContractShape Shape,
@@ -677,6 +769,36 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
                 {
                     b.Line(line);
                 }
+            }
+
+            // Emit constructors for class output when GenerateConstructors is enabled
+            if (model.Shape.OutputKind == 0 && model.Shape.GenerateConstructors && model.Properties.Count > 0)
+            {
+                b.Line();
+                BuildConstructors(b, model);
+            }
+        }
+    }
+
+    private static void BuildConstructors(CSharpCodeBuilder b, GeneratedContracts.GeneratedContractFileModel model)
+    {
+        // Parameterless constructor
+        using (b.Block($"public {model.Shape.TypeName}()"))
+        {
+        }
+        b.Line();
+
+        // All-args constructor — annotate with [SetsRequiredMembers] so it can satisfy required properties.
+        var parameters = model.Properties
+            .Select(p => $"{GetTypeName(p)} {p.Name}")
+            .ToArray();
+
+        b.Line("[global::System.Diagnostics.CodeAnalysis.SetsRequiredMembers]");
+        using (b.Block($"public {model.Shape.TypeName}({string.Join(", ", parameters)})"))
+        {
+            foreach (var property in model.Properties)
+            {
+                b.Line($"this.{property.Name} = {property.Name};");
             }
         }
     }
