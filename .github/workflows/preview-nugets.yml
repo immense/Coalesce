@@ -1,0 +1,130 @@
+name: Preview packages
+
+on:
+  push:
+    branches:
+      - "ci/**"
+      - "feat/**"
+      - "fix/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    uses: ./.github/workflows/part-compute-version.yml
+    secrets: inherit
+    with:
+      prereleaseSlug: preview
+
+  build-nuget:
+    runs-on: ubuntu-latest
+    needs: meta
+
+    env:
+      COALESCE_VERSION: ${{ needs.meta.outputs.COALESCE_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-dotnet
+      - uses: ./.github/actions/setup-js
+      - run: dotnet restore
+      - run: dotnet build --no-restore --configuration Release /WarnAsError
+      - run: dotnet pack --no-build --configuration Release -p:PackageOutputPath="$(pwd)/out/packages"
+
+      - name: Upload NuGet packages artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: out/packages
+
+  publish-nuget:
+    runs-on: ubuntu-latest
+    needs: [build-nuget]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download NuGet packages artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: out/packages
+
+      - name: Push packages to GitHub Packages
+        run: dotnet nuget push "out/packages/*.nupkg" --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key ${{ github.token }} --skip-duplicate
+
+  build-npm:
+    runs-on: ubuntu-latest
+    needs: meta
+    defaults:
+      run:
+        working-directory: src/coalesce-vue
+
+    env:
+      COALESCE_VERSION: ${{ needs.meta.outputs.COALESCE_VERSION }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-js
+      - run: pnpm build
+      - run: pnpm pack
+
+      - name: Upload coalesce-vue tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: coalesce-vue
+          path: src/coalesce-vue/coalesce-vue-*.tgz
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    needs: [build-npm]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://npm.pkg.github.com"
+
+      - name: Download coalesce-vue tarball
+        uses: actions/download-artifact@v8
+        with:
+          name: coalesce-vue
+          path: out/npm
+
+      # GitHub Packages requires the npm package to be scoped to the org that owns the repo.
+      # Source keeps the upstream-compatible name `coalesce-vue`; we re-scope the tarball
+      # contents at publish time only, so consumers install `@<owner>/coalesce-vue`.
+      - name: Re-scope coalesce-vue tarball for GitHub Packages
+        working-directory: out/npm
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          OWNER_LOWER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          mkdir staging
+          tar -xzf coalesce-vue-*.tgz -C staging
+          cd staging/package
+          npm pkg set name="@${OWNER_LOWER}/coalesce-vue"
+          npm pkg set repository.type="git"
+          npm pkg set repository.url="git+https://github.com/${REPO}.git"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+          npm pack
+          mv "$(ls *.tgz | tail -n1)" ../../scoped-coalesce-vue.tgz
+
+      - name: Publish to GitHub Packages
+        working-directory: out/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: npm publish scoped-coalesce-vue.tgz --tag preview
