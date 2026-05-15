@@ -97,6 +97,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             }
 
             foreach (var shape in GetShapes(sourceType)
+                .Select(shape => ResolveConventions(shape, sourceType, targetAssemblyName))
                 .Where(shape => string.Equals(
                     NormalizeAssemblyName(shape.TargetAssemblyName),
                     targetAssemblyName,
@@ -212,6 +213,73 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             || shape.TargetNamespace != sourceType.ContainingNamespace.ToDisplayString();
     }
 
+    /// <summary>
+    /// Resolves convention-based defaults for shapes that used the simplified 1-arg constructor.
+    /// Empty strings in TargetAssemblyName/TargetNamespace/TypeName are filled from the source type context.
+    /// </summary>
+    private static ContractShape ResolveConventions(ContractShape shape, INamedTypeSymbol sourceType, string compilationAssemblyName)
+    {
+        var resolvedAssembly = shape.TargetAssemblyName;
+        var resolvedNamespace = shape.TargetNamespace;
+        var resolvedTypeName = shape.TypeName;
+        var resolvedPolicy = shape.Policy;
+
+        if (string.IsNullOrEmpty(resolvedAssembly))
+        {
+            resolvedAssembly = compilationAssemblyName;
+        }
+
+        if (string.IsNullOrEmpty(resolvedNamespace))
+        {
+            resolvedNamespace = sourceType.ContainingNamespace.IsGlobalNamespace
+                ? string.Empty
+                : sourceType.ContainingNamespace.ToDisplayString();
+        }
+
+        if (string.IsNullOrEmpty(resolvedTypeName))
+        {
+            resolvedTypeName = InferTypeName(sourceType.Name);
+        }
+
+        // If nothing changed, return original to avoid allocations
+        if (resolvedAssembly == shape.TargetAssemblyName
+            && resolvedNamespace == shape.TargetNamespace
+            && resolvedTypeName == shape.TypeName)
+        {
+            return shape;
+        }
+
+        return new ContractShape(
+            shape.ShapeName,
+            shape.OutputKind,
+            resolvedAssembly,
+            resolvedNamespace,
+            resolvedTypeName,
+            resolvedPolicy,
+            shape.Members,
+            shape.ExcludedMembers,
+            shape.Implements,
+            shape.IncludedPropertyAttributes,
+            shape.SettableProperties,
+            shape.NullabilityTransform,
+            shape.GenerateConstructors);
+    }
+
+    private static string InferTypeName(string sourceClassName)
+    {
+        // Strip known suffixes: "ContractSource", "Source"
+        var suffixes = new[] { "ContractSource", "Source" };
+        foreach (var suffix in suffixes)
+        {
+            if (sourceClassName.EndsWith(suffix, StringComparison.Ordinal) && sourceClassName.Length > suffix.Length)
+            {
+                return sourceClassName.Substring(0, sourceClassName.Length - suffix.Length);
+            }
+        }
+
+        return sourceClassName;
+    }
+
     internal static IEnumerable<ContractShape> GetShapes(INamedTypeSymbol sourceType)
         => sourceType.GetAttributes()
             .Where(IsShapeAttribute)
@@ -224,24 +292,59 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
 
     private static ContractShape? ParseShape(AttributeData attribute)
     {
-        if (attribute.ConstructorArguments.Length < 5)
+        if (attribute.ConstructorArguments.Length < 1)
         {
             return null;
         }
 
+        string shapeName;
+        int outputKind;
+        string targetAssemblyName;
+        string targetNamespace;
+        string typeName;
+
+        if (attribute.ConstructorArguments.Length >= 5)
+        {
+            // Full 5-arg constructor
+            shapeName = (string?)attribute.ConstructorArguments[0].Value ?? string.Empty;
+            outputKind = Convert.ToInt32(attribute.ConstructorArguments[1].Value);
+            targetAssemblyName = (string?)attribute.ConstructorArguments[2].Value ?? string.Empty;
+            targetNamespace = (string?)attribute.ConstructorArguments[3].Value ?? string.Empty;
+            typeName = (string?)attribute.ConstructorArguments[4].Value ?? string.Empty;
+        }
+        else if (attribute.ConstructorArguments.Length == 1)
+        {
+            // Simplified 1-arg constructor — conventions will resolve empty strings later.
+            // Default policy is PublicScalarProperties (not Explicit) for the simplified form.
+            shapeName = (string?)attribute.ConstructorArguments[0].Value ?? string.Empty;
+            outputKind = GetInt(attribute, "OutputKind", ClassOutputKind);
+            targetAssemblyName = string.Empty;
+            targetNamespace = string.Empty;
+            typeName = string.Empty;
+        }
+        else
+        {
+            return null;
+        }
+
+        // For the 1-arg constructor, default policy is PublicScalarProperties unless explicitly overridden.
+        var isSimplifiedForm = attribute.ConstructorArguments.Length == 1;
+        var defaultPolicy = isSimplifiedForm ? PublicScalarPropertiesPolicy : ExplicitPolicy;
+
         return new ContractShape(
-            (string?)attribute.ConstructorArguments[0].Value ?? string.Empty,
-            Convert.ToInt32(attribute.ConstructorArguments[1].Value),
-            (string?)attribute.ConstructorArguments[2].Value ?? string.Empty,
-            (string?)attribute.ConstructorArguments[3].Value ?? string.Empty,
-            (string?)attribute.ConstructorArguments[4].Value ?? string.Empty,
-            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Policy)),
+            shapeName,
+            outputKind,
+            targetAssemblyName,
+            targetNamespace,
+            typeName,
+            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Policy), defaultPolicy),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Members)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.ExcludedMembers)),
             GetStringArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.Implements)),
             GetTypeArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.IncludedPropertyAttributes)),
             GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.SettableProperties)),
-            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)));
+            GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)),
+            GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.GenerateConstructors), defaultValue: isSimplifiedForm));
     }
 
     internal static IReadOnlyList<ContractPropertyModel> ResolveProperties(INamedTypeSymbol sourceType, ContractShape shape)
@@ -535,8 +638,46 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             builder.Append("    ").AppendLine(BuildPropertyLine(model, property));
         }
 
+        // Emit constructors for class output when GenerateConstructors is enabled
+        if (model.Shape.OutputKind == ClassOutputKind && model.Shape.GenerateConstructors && model.Properties.Count > 0)
+        {
+            builder.AppendLine();
+            RenderConstructors(builder, model);
+        }
+
         builder.AppendLine("}");
         return builder.ToString();
+    }
+
+    private static void RenderConstructors(StringBuilder builder, GeneratedContractFileModel model)
+    {
+        // Parameterless constructor
+        builder.Append("    public ").Append(model.Shape.TypeName).AppendLine("()");
+        builder.AppendLine("    {");
+        builder.AppendLine("    }");
+        builder.AppendLine();
+
+        // All-args constructor
+        var parameters = model.Properties
+            .Select(p => new { TypeName = GetTypeName(p), p.Name })
+            .ToArray();
+
+        builder.Append("    public ").Append(model.Shape.TypeName).Append('(');
+        for (var i = 0; i < parameters.Length; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(", ");
+            }
+            builder.Append(parameters[i].TypeName).Append(' ').Append(parameters[i].Name);
+        }
+        builder.AppendLine(")");
+        builder.AppendLine("    {");
+        foreach (var param in parameters)
+        {
+            builder.Append("        this.").Append(param.Name).Append(" = ").Append(param.Name).AppendLine(";");
+        }
+        builder.AppendLine("    }");
     }
 
     private static IEnumerable<string> BuildPropertyAttributeLines(ContractPropertyModel property)
@@ -783,7 +924,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             .Replace('>', '_')
             .Replace(':', '_');
 
-    private static int GetInt(AttributeData attribute, string name)
+    private static int GetInt(AttributeData attribute, string name, int defaultValue = 0)
     {
         foreach (var argument in attribute.NamedArguments)
         {
@@ -793,7 +934,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             }
         }
 
-        return 0;
+        return defaultValue;
     }
 
     private static IReadOnlyList<string> GetStringArray(AttributeData attribute, string name)
@@ -832,7 +973,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         return [];
     }
 
-    private static bool GetBool(AttributeData attribute, string name)
+    private static bool GetBool(AttributeData attribute, string name, bool defaultValue = false)
     {
         foreach (var argument in attribute.NamedArguments)
         {
@@ -842,8 +983,10 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             }
         }
 
-        return false;
+        return defaultValue;
     }
+
+
 
     private static string? GetString(AttributeData attribute, string name)
     {
@@ -872,7 +1015,8 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             IReadOnlyList<string> implements,
             IReadOnlyList<string> includedPropertyAttributes,
             bool settableProperties,
-            int nullabilityTransform)
+            int nullabilityTransform,
+            bool generateConstructors = false)
         {
             ShapeName = shapeName;
             OutputKind = outputKind;
@@ -886,6 +1030,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             IncludedPropertyAttributes = includedPropertyAttributes;
             SettableProperties = settableProperties;
             NullabilityTransform = nullabilityTransform;
+            GenerateConstructors = generateConstructors;
         }
 
         public string ShapeName { get; }
@@ -900,6 +1045,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         public IReadOnlyList<string> IncludedPropertyAttributes { get; }
         public bool SettableProperties { get; }
         public int NullabilityTransform { get; }
+        public bool GenerateConstructors { get; }
     }
 
     internal sealed class GeneratedContractFileModel
@@ -963,6 +1109,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         public static Type[] IncludedPropertyAttributes { get; set; } = [];
         public static bool SettableProperties { get; set; }
         public static int NullabilityTransform { get; set; }
+        public static bool GenerateConstructors { get; set; }
     }
 
     private static class DtoSourceAttributePlaceholder

@@ -219,6 +219,117 @@ public class GeneratedContractShapeSourceGeneratorTests
             .Append(MetadataReference.CreateFromFile(typeof(object).Assembly.Location))
             .ToList();
 
+    [Test]
+    public async Task SimplifiedConventionConstructor_InfersAssemblyNamespaceAndTypeName()
+    {
+        var compilation = CreateCompilation(
+            "MyApp.Web",
+            """
+            #nullable enable
+            using IntelliTect.Coalesce.DataAnnotations;
+
+            namespace MyApp.Web.Contracts;
+
+            [GeneratedContractShape("add-tags")]
+            internal sealed class AddTagsRequestContractSource
+            {
+                public int EntityId { get; set; }
+                public string TagName { get; set; } = null!;
+                public bool Active { get; set; }
+            }
+
+            public class Consumer
+            {
+                // Should resolve to "AddTagsRequest" (minus "ContractSource" suffix)
+                // in namespace "MyApp.Web.Contracts" (same as source class)
+                // in assembly "MyApp.Web" (same as compilation)
+                public MyApp.Web.Contracts.AddTagsRequest Request { get; set; } = new()
+                {
+                    EntityId = 1,
+                    TagName = "hi",
+                    Active = true
+                };
+            }
+            """);
+
+        var updatedCompilation = RunGenerator(compilation, out var diagnostics);
+
+        await Assert.That(diagnostics).IsEmpty();
+        await Assert.That(updatedCompilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).IsEmpty();
+        await Assert.That(updatedCompilation.SyntaxTrees.Any(tree => tree.FilePath.Contains("AddTagsRequest.g.cs", StringComparison.Ordinal))).IsTrue();
+
+        // Verify the generated source contains constructors
+        var generatedTree = updatedCompilation.SyntaxTrees.First(tree => tree.FilePath.Contains("AddTagsRequest.g.cs", StringComparison.Ordinal));
+        var generatedText = generatedTree.GetText().ToString();
+        await Assert.That(generatedText.Contains("public AddTagsRequest()")).IsTrue();
+        await Assert.That(generatedText.Contains("public AddTagsRequest(")).IsTrue();
+    }
+
+    [Test]
+    public async Task SimplifiedConventionConstructor_WithSourceSuffix_InfersTypeName()
+    {
+        var compilation = CreateCompilation(
+            "MyApp.Web",
+            """
+            #nullable enable
+            using IntelliTect.Coalesce.DataAnnotations;
+
+            namespace MyApp.Web.Dto;
+
+            [GeneratedContractShape("my-entity")]
+            internal sealed class MyEntitySource
+            {
+                public string Name { get; set; } = null!;
+                public int Count { get; set; }
+            }
+
+            public class Consumer
+            {
+                public MyApp.Web.Dto.MyEntity Entity { get; set; } = new() { Name = "x", Count = 1 };
+            }
+            """);
+
+        var updatedCompilation = RunGenerator(compilation, out var diagnostics);
+
+        await Assert.That(diagnostics).IsEmpty();
+        await Assert.That(updatedCompilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).IsEmpty();
+        await Assert.That(updatedCompilation.SyntaxTrees.Any(tree => tree.FilePath.Contains("MyEntity.g.cs", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task GenerateConstructors_False_OmitsConstructors()
+    {
+        var compilation = CreateCompilation(
+            "MyApp.Web",
+            """
+            #nullable enable
+            using IntelliTect.Coalesce.DataAnnotations;
+
+            namespace MyApp.Web.Contracts;
+
+            [GeneratedContractShape("no-ctor", GenerateConstructors = false)]
+            internal sealed class NoCtorContractSource
+            {
+                public string Name { get; set; } = null!;
+            }
+
+            public class Consumer
+            {
+                public MyApp.Web.Contracts.NoCtor Item { get; set; } = new() { Name = "x" };
+            }
+            """);
+
+        var updatedCompilation = RunGenerator(compilation, out var diagnostics);
+
+        await Assert.That(diagnostics).IsEmpty();
+        await Assert.That(updatedCompilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var generatedTree = updatedCompilation.SyntaxTrees.First(tree => tree.FilePath.Contains("NoCtor.g.cs", StringComparison.Ordinal));
+        var generatedText = generatedTree.GetText().ToString();
+        // Should NOT contain constructors
+        await Assert.That(generatedText.Contains("public NoCtor(")).IsFalse();
+    }
+
     private sealed class MetadataReferencePathComparer : IEqualityComparer<MetadataReference>
     {
         public static MetadataReferencePathComparer Instance { get; } = new();
