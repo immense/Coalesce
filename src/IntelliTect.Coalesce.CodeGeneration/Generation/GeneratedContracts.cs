@@ -272,6 +272,11 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         if (string.IsNullOrEmpty(resolvedAssembly))
         {
             resolvedAssembly = compilationAssemblyName;
+            // Strip .dll extension if present (can happen when assembly loaded from metadata reference)
+            if (resolvedAssembly.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                resolvedAssembly = resolvedAssembly.Substring(0, resolvedAssembly.Length - 4);
+            }
         }
 
         if (string.IsNullOrEmpty(resolvedNamespace))
@@ -279,6 +284,13 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             resolvedNamespace = sourceType.ContainingNamespace.IsGlobalNamespace
                 ? string.Empty
                 : sourceType.ContainingNamespace.ToDisplayString();
+            // Strip .GeneratedSources suffix - source classes are placed in this
+            // sub-namespace by convention, but generated types belong in the parent.
+            const string generatedSourcesSuffix = ".GeneratedSources";
+            if (resolvedNamespace.EndsWith(generatedSourcesSuffix, StringComparison.Ordinal))
+            {
+                resolvedNamespace = resolvedNamespace.Substring(0, resolvedNamespace.Length - generatedSourcesSuffix.Length);
+            }
         }
 
         if (string.IsNullOrEmpty(resolvedTypeName))
@@ -603,7 +615,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             return IsScalarLikeType(elementType);
         }
 
-        var fullyQualifiedName = type.ToDisplayString();
+        var fullyQualifiedName = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
         return fullyQualifiedName is
             "System.Guid" or
             "System.DateTime" or
@@ -611,7 +623,9 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             "System.TimeSpan" or
             "System.DateOnly" or
             "System.TimeOnly" or
-            "System.Text.Json.JsonElement";
+            "System.Text.Json.JsonElement" or
+            "NuGet.Versioning.SemanticVersion" or
+            "NuGet.Versioning.NuGetVersion";
     }
 
     private static bool TryGetCollectionElementType(ITypeSymbol type, out ITypeSymbol elementType)

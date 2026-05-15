@@ -445,7 +445,9 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
         => !property.IsStatic
            && property.Parameters.Length == 0
            && property.DeclaredAccessibility == Accessibility.Public
-           && property.GetMethod?.DeclaredAccessibility == Accessibility.Public;
+           && property.GetMethod?.DeclaredAccessibility == Accessibility.Public
+           && property.SetMethod?.DeclaredAccessibility == Accessibility.Public
+           && IsScalarLikeType(property.Type);
 
     private static IPropertySymbol? FindProperty(INamedTypeSymbol type, string memberName)
     {
@@ -578,7 +580,7 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             return IsScalarLikeType(elementType);
         }
 
-        var fullyQualifiedName = type.ToDisplayString();
+        var fullyQualifiedName = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
         return fullyQualifiedName is
             "System.Guid" or
             "System.DateTime" or
@@ -586,7 +588,9 @@ public sealed class GeneratedContractShapeSourceGenerator : IIncrementalGenerato
             "System.TimeSpan" or
             "System.DateOnly" or
             "System.TimeOnly" or
-            "System.Text.Json.JsonElement";
+            "System.Text.Json.JsonElement" or
+            "NuGet.Versioning.SemanticVersion" or
+            "NuGet.Versioning.NuGetVersion";
     }
 
     private static bool TryGetCollectionElementType(ITypeSymbol type, out ITypeSymbol elementType)
