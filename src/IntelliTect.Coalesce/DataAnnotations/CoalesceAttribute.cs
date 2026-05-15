@@ -27,4 +27,12 @@ public sealed class CoalesceAttribute : Attribute
     /// are discovered alongside sets declared directly on the attributed context type.
     /// </summary>
     public bool IncludeInheritedDbSets { get; set; } = true;
+
+    /// <summary>
+    /// When placed on a type, overrides the route slug emitted after "api/" on the
+    /// generated controller. Also flows into the frontend SDK metadata so the
+    /// generated client targets the same URL. Example: setting this to
+    /// <c>v1/smtp-configs</c> produces <c>[Route("api/v1/smtp-configs")]</c>.
+    /// </summary>
+    public string? ApiRoute { get; set; }
 }

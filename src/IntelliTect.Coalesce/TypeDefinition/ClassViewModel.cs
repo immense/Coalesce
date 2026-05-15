@@ -63,7 +63,8 @@ public abstract class ClassViewModel : IAttributeProvider
 
     public string ControllerName => ClientTypeName;
 
-    public string ApiRouteControllerPart => ControllerName;
+    public string ApiRouteControllerPart =>
+        this.GetAttributeValue<CoalesceAttribute>(a => a.ApiRoute) ?? ControllerName;
 
     public string ApiControllerClassName
     {
