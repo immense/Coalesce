@@ -23,15 +23,27 @@ public sealed class GeneratedContractShapeAttribute : Attribute
     }
 
     /// <summary>
-    /// Declares a generated contract shape using conventions to infer assembly, namespace, and type name.
+    /// Declares a generated contract shape using conventions to infer assembly, namespace, type name,
+    /// and shape name.
     /// <para>Conventions:</para>
     /// <list type="bullet">
+    /// <item><c>ShapeName</c>: kebab-case of the source class name minus "ContractSource"/"Source"
+    /// suffix (e.g. <c>GetComputerResponseContractSource</c> → <c>get-computer-response</c>).</item>
     /// <item><c>TargetAssemblyName</c>: inferred from the consuming compilation's assembly name.</item>
     /// <item><c>TargetNamespace</c>: inferred from the source class's namespace.</item>
     /// <item><c>TypeName</c>: inferred from the source class name minus "ContractSource"/"Source" suffix.</item>
     /// <item><c>OutputKind</c>: defaults to <see cref="GeneratedContractOutputKind.Class"/>.</item>
-    /// <item><c>Policy</c>: defaults to <see cref="GeneratedContractPolicy.PublicScalarProperties"/>.</item>
+    /// <item><c>Policy</c>: defaults to <see cref="GeneratedContractPolicy.AllDeclaredProperties"/>.</item>
     /// </list>
+    /// </summary>
+    public GeneratedContractShapeAttribute()
+        : this(string.Empty)
+    {
+    }
+
+    /// <summary>
+    /// Declares a generated contract shape using conventions to infer assembly, namespace, and type name.
+    /// Pass an empty string to also auto-derive <see cref="ShapeName"/> from the source class name.
     /// </summary>
     public GeneratedContractShapeAttribute(string shapeName)
     {
@@ -40,7 +52,7 @@ public sealed class GeneratedContractShapeAttribute : Attribute
         TargetAssemblyName = string.Empty;
         TargetNamespace = string.Empty;
         TypeName = string.Empty;
-        Policy = GeneratedContractPolicy.PublicScalarProperties;
+        Policy = GeneratedContractPolicy.AllDeclaredProperties;
     }
 
     public string ShapeName { get; }

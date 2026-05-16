@@ -4,4 +4,5 @@ public enum GeneratedContractPolicy
 {
     Explicit = 0,
     PublicScalarProperties = 1,
+    AllDeclaredProperties = 2,
 }
