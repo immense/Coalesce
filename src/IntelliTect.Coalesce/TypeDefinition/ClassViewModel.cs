@@ -300,6 +300,13 @@ public abstract class ClassViewModel : IAttributeProvider
             ?? Type.Assembly.GetAttributeValue<DtoDateTimeOptionsAttribute, DtoDateTimeMode>(a => a.Mode)
             ?? DtoDateTimeMode.Preserve;
 
+    private UtcSuffixCasing? _responseDtoUtcSuffixCasing;
+    public UtcSuffixCasing ResponseDtoUtcSuffixCasing
+        => _responseDtoUtcSuffixCasing ??=
+            this.GetAttributeValue<DtoDateTimeOptionsAttribute, UtcSuffixCasing>(a => a.UtcSuffixCasing)
+            ?? Type.Assembly.GetAttributeValue<DtoDateTimeOptionsAttribute, UtcSuffixCasing>(a => a.UtcSuffixCasing)
+            ?? UtcSuffixCasing.PascalCase;
+
     public string? DefaultGetDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Get);
     public string? DefaultListDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.List);
     public string? DefaultCountDtoIncludes => this.GetAttributeValue<DtoActionDefaultsAttribute>(a => a.Count);

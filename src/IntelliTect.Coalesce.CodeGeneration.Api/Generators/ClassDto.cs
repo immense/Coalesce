@@ -806,17 +806,19 @@ public class ClassDto : StringBuilderCSharpGenerator<ClassViewModel>
             return propertyName;
         }
 
-        if (propertyName.EndsWith("UTC", StringComparison.Ordinal))
+        var suffix = Model.ResponseDtoUtcSuffixCasing == UtcSuffixCasing.UpperCase ? "UTC" : "Utc";
+
+        if (propertyName.EndsWith(suffix, StringComparison.Ordinal))
         {
             return propertyName;
         }
 
         if (propertyName.EndsWith("Utc", StringComparison.OrdinalIgnoreCase))
         {
-            return propertyName[..^3] + "UTC";
+            return propertyName[..^3] + suffix;
         }
 
-        return propertyName + "UTC";
+        return propertyName + suffix;
     }
 
     private string TransformResponseValue(TypeViewModel type, string sourceExpression)

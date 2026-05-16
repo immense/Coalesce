@@ -1,4 +1,5 @@
 # 6.5.0
+- Added `DtoDateTimeOptionsAttribute.UtcSuffixCasing` to control the casing of the suffix appended to response DTO `DateTime` property names when `DtoDateTimeMode.Utc` is in effect. Defaults to `PascalCase` (e.g. `CreatedDateUtc`); set to `UpperCase` for the previous `CreatedDateUTC` behavior.
 - Support enums annotated with `[JsonConverter(typeof(JsonStringEnumConverter))]` as string-serialized enums. These are generated as string-valued TypeScript enums and serialized as strings over the wire.
 - Added `getPromise()` method to API callers, returning the current invocation's promise (or `undefined` if idle).
 - Improved auto-save indicator in `c-admin-editor`.
