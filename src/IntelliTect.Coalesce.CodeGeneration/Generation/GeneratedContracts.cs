@@ -26,7 +26,19 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
     private const string AliasAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractAliasAttribute";
     private const string IgnoreAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractIgnoreAttribute";
     private const string DefaultAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractDefaultAttribute";
+    private const string ParameterDefaultAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractParameterDefaultAttribute";
+    private const string RawMemberAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractRawMemberAttribute";
     private const string DefaultsAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.CoalesceGeneratedContractDefaultsAttribute";
+    private const string SetsRequiredMembersAttributeMetadataName = "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute";
+
+    private static readonly SymbolDisplayFormat ContractsTypeDisplayFormat = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+        miscellaneousOptions:
+            SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
+            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier |
+            SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
     private const string DtoSourceAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.DtoSourceAttribute";
     private const string NullableAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractNullableAttribute";
     private const string NonNullableAttributeMetadataName = "IntelliTect.Coalesce.DataAnnotations.GeneratedContractNonNullableAttribute";
@@ -73,7 +85,8 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
                     .WithModel(new GeneratedContractFileModel(
                         shape,
                         ResolveProperties(sourceType, shape),
-                        sourceType.ToDisplayString()))
+                        sourceType.ToDisplayString(),
+                        GetRawMembers(sourceType, shape.ShapeName)))
                     .WithOutputPath(Path.Combine(projectDirectory, GeneratedContractsRelativePath, $"{shape.TypeName}.g.cs"));
             }
         }
@@ -285,6 +298,12 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             nameof(GeneratedContractShapeAttributePlaceholder.Policy),
             AllDeclaredPropertiesPolicy);
 
+        var baseClassSymbol = GetTypeSymbol(attribute, nameof(GeneratedContractShapeAttributePlaceholder.BaseClass));
+        var baseClassTypeName = baseClassSymbol?.ToDisplayString(ContractsTypeDisplayFormat);
+        var baseClassParameters = baseClassSymbol is null
+            ? (IReadOnlyList<ConstructorParameter>)Array.Empty<ConstructorParameter>()
+            : GetBaseClassConstructorParameters(baseClassSymbol);
+
         // GenerateConstructors precedence: explicit on shape > assembly default > true.
         bool generateConstructors;
         if (TryGetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.GenerateConstructors), out var explicitValue))
@@ -309,7 +328,115 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             GetTypeArray(attribute, nameof(GeneratedContractShapeAttributePlaceholder.IncludedPropertyAttributes)),
             GetBool(attribute, nameof(GeneratedContractShapeAttributePlaceholder.SettableProperties)),
             GetInt(attribute, nameof(GeneratedContractShapeAttributePlaceholder.NullabilityTransform)),
-            generateConstructors);
+            generateConstructors,
+            baseClassTypeName,
+            baseClassParameters);
+    }
+
+    private static INamedTypeSymbol? GetTypeSymbol(AttributeData attribute, string name)
+    {
+        foreach (var argument in attribute.NamedArguments)
+        {
+            if (argument.Key == name && argument.Value.Value is INamedTypeSymbol type)
+            {
+                return type;
+            }
+        }
+        return null;
+    }
+
+    private static IReadOnlyList<ConstructorParameter> GetBaseClassConstructorParameters(INamedTypeSymbol baseClass)
+    {
+        var accessibleCtors = baseClass.InstanceConstructors
+            .Where(c => c.DeclaredAccessibility is Accessibility.Public
+                       or Accessibility.Protected
+                       or Accessibility.ProtectedOrInternal)
+            .ToArray();
+
+        if (accessibleCtors.Length == 0)
+        {
+            return [];
+        }
+
+        var preferred = accessibleCtors
+            .FirstOrDefault(c => c.GetAttributes()
+                .Any(a => a.AttributeClass?.ToDisplayString() == SetsRequiredMembersAttributeMetadataName))
+            ?? accessibleCtors.OrderByDescending(c => c.Parameters.Length).First();
+
+        if (preferred.Parameters.Length == 0)
+        {
+            return [];
+        }
+
+        return preferred.Parameters
+            .Select(p => new ConstructorParameter(
+                p.Type.ToDisplayString(ContractsTypeDisplayFormat),
+                p.Name,
+                FormatParameterDefault(p)))
+            .ToArray();
+    }
+
+    private static string? FormatParameterDefault(IParameterSymbol parameter)
+    {
+        if (!parameter.HasExplicitDefaultValue)
+        {
+            return null;
+        }
+
+        return parameter.ExplicitDefaultValue is { } value
+            ? FormatPrimitiveAttributeArgument(value)
+            : "null";
+    }
+
+    private static string FormatPrimitiveAttributeArgument(object value)
+        => value switch
+        {
+            string stringValue => SymbolDisplay.FormatLiteral(stringValue, quote: true),
+            char charValue => SymbolDisplay.FormatLiteral(charValue, quote: true),
+            bool boolValue => boolValue ? "true" : "false",
+            _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "default"
+        };
+
+    internal static IReadOnlyList<string> GetRawMembers(INamedTypeSymbol sourceType, string shapeName)
+    {
+        var members = new List<string>();
+        foreach (var attribute in sourceType.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != RawMemberAttributeMetadataName)
+            {
+                continue;
+            }
+
+            string? targetShape;
+            string code;
+            if (attribute.ConstructorArguments.Length == 1)
+            {
+                targetShape = null;
+                code = attribute.ConstructorArguments[0].Value as string ?? string.Empty;
+            }
+            else if (attribute.ConstructorArguments.Length >= 2)
+            {
+                targetShape = attribute.ConstructorArguments[0].Value as string;
+                code = attribute.ConstructorArguments[1].Value as string ?? string.Empty;
+            }
+            else
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(targetShape)
+                && !string.Equals(targetShape, shapeName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(code))
+            {
+                members.Add(code);
+            }
+        }
+
+        return members;
     }
 
     /// <summary>
@@ -373,6 +500,19 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             TargetNamespace = resolvedNamespace,
             TypeName = resolvedTypeName,
         };
+    }
+
+    private static string? GetParameterDefaultExpression(IPropertySymbol property)
+    {
+        var attribute = property.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ParameterDefaultAttributeMetadataName);
+
+        if (attribute is null || attribute.ConstructorArguments.Length == 0)
+        {
+            return null;
+        }
+
+        return attribute.ConstructorArguments[0].Value as string;
     }
 
     internal static string InferTypeName(string sourceClassName)
@@ -533,6 +673,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
                 HasAttribute(property, NonNullableAttributeMetadataName, shape.ShapeName),
                 GetDtoSource(property),
                 GetDefaultExpression(property),
+                GetParameterDefaultExpression(property),
                 GetIncludedPropertyAttributes(property, shape)));
         }
 
@@ -807,6 +948,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         public static bool SettableProperties { get; set; }
         public static int NullabilityTransform { get; set; }
         public static bool GenerateConstructors { get; set; }
+        public static Type? BaseClass { get; set; }
     }
 
     internal sealed class AssemblyDefaults
@@ -836,12 +978,26 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         IReadOnlyList<string> IncludedPropertyAttributes,
         bool SettableProperties,
         int NullabilityTransform,
-        bool GenerateConstructors = false);
+        bool GenerateConstructors = false,
+        string? BaseClassTypeName = null,
+        IReadOnlyList<ConstructorParameter>? BaseClassParameters = null)
+    {
+        public IReadOnlyList<ConstructorParameter> BaseClassParameters { get; init; } = BaseClassParameters ?? Array.Empty<ConstructorParameter>();
+    }
+
+    internal sealed record ConstructorParameter(
+        string TypeName,
+        string Name,
+        string? DefaultExpression);
 
     internal sealed record GeneratedContractFileModel(
         ContractShape Shape,
         IReadOnlyList<ContractPropertyModel> Properties,
-        string SourceTypeName);
+        string SourceTypeName,
+        IReadOnlyList<string>? RawMembers = null)
+    {
+        public IReadOnlyList<string> RawMembers { get; init; } = RawMembers ?? Array.Empty<string>();
+    }
 
     internal sealed record ContractPropertyModel(
         string Name,
@@ -850,6 +1006,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         bool ForceNonNullable,
         DtoSourceMetadata? DtoSource,
         string? DefaultExpression,
+        string? ParameterDefaultExpression,
         IReadOnlyList<AttributeData> IncludedPropertyAttributes);
 
     internal sealed record DtoSourceMetadata(
@@ -928,11 +1085,9 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
         b.Line();
 
         var declarationKind = model.Shape.OutputKind == 1 ? "interface" : "partial class";
-        var implements = model.Shape.Implements.Count > 0
-            ? " : " + string.Join(", ", model.Shape.Implements.Select(NormalizeTypeName))
-            : string.Empty;
+        var inheritance = BuildInheritanceClause(model.Shape);
 
-        using (b.Block($"public {declarationKind} {model.Shape.TypeName}{implements}"))
+        using (b.Block($"public {declarationKind} {model.Shape.TypeName}{inheritance}"))
         {
             foreach (var property in model.Properties)
             {
@@ -942,13 +1097,36 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
                 }
             }
 
-            // Emit constructors for class output when GenerateConstructors is enabled
-            if (model.Shape.OutputKind == 0 && model.Shape.GenerateConstructors && model.Properties.Count > 0)
+            var shouldEmitConstructors = model.Shape.OutputKind == 0
+                && model.Shape.GenerateConstructors
+                && (model.Properties.Count > 0 || model.Shape.BaseClassParameters.Count > 0);
+
+            if (shouldEmitConstructors)
             {
                 b.Line();
                 BuildConstructors(b, model);
             }
+
+            foreach (var rawMember in model.RawMembers)
+            {
+                b.Line();
+                b.Line(rawMember);
+            }
         }
+    }
+
+    private static string BuildInheritanceClause(GeneratedContracts.ContractShape shape)
+    {
+        var entries = new List<string>();
+        if (shape.OutputKind == 0 && !string.IsNullOrEmpty(shape.BaseClassTypeName))
+        {
+            entries.Add(NormalizeTypeName(shape.BaseClassTypeName!));
+        }
+        foreach (var implement in shape.Implements)
+        {
+            entries.Add(NormalizeTypeName(implement));
+        }
+        return entries.Count == 0 ? string.Empty : " : " + string.Join(", ", entries);
     }
 
     private static void BuildConstructors(CSharpCodeBuilder b, GeneratedContracts.GeneratedContractFileModel model)
@@ -967,13 +1145,31 @@ internal sealed class GeneratedContractFile : StringBuilderCSharpGenerator<Gener
         }
         b.Line();
 
-        // All-args constructor — annotate with [SetsRequiredMembers] so it can satisfy required properties.
-        var parameters = model.Properties
-            .Select(p => $"{GetTypeName(p)} {p.Name}")
-            .ToArray();
+        // All-args constructor — base class params first (forwarded via : base(...)),
+        // then own-property params (each carrying its [GeneratedContractParameterDefault]).
+        var baseParams = model.Shape.BaseClassParameters;
+        var paramParts = new List<string>(baseParams.Count + model.Properties.Count);
+        foreach (var bp in baseParams)
+        {
+            paramParts.Add(bp.DefaultExpression is { Length: > 0 } bpd
+                ? $"{bp.TypeName} {bp.Name} = {bpd}"
+                : $"{bp.TypeName} {bp.Name}");
+        }
+        foreach (var property in model.Properties)
+        {
+            paramParts.Add(property.ParameterDefaultExpression is { Length: > 0 } pd
+                ? $"{GetTypeName(property)} {property.Name} = {pd}"
+                : $"{GetTypeName(property)} {property.Name}");
+        }
+
+        var signature = $"public {model.Shape.TypeName}({string.Join(", ", paramParts)})";
+        if (baseParams.Count > 0)
+        {
+            signature += " : base(" + string.Join(", ", baseParams.Select(p => p.Name)) + ")";
+        }
 
         b.Line("[global::System.Diagnostics.CodeAnalysis.SetsRequiredMembers]");
-        using (b.Block($"public {model.Shape.TypeName}({string.Join(", ", parameters)})"))
+        using (b.Block(signature))
         {
             foreach (var property in model.Properties)
             {

@@ -65,7 +65,8 @@ internal static class GeneratedContractCompilationAugmentor
                 var model = new GeneratedContracts.GeneratedContractFileModel(
                     shape,
                     GeneratedContracts.ResolveProperties(sourceType, shape),
-                    sourceType.ToDisplayString(SymbolTypeViewModel.DefaultDisplayFormat));
+                    sourceType.ToDisplayString(SymbolTypeViewModel.DefaultDisplayFormat),
+                    GeneratedContracts.GetRawMembers(sourceType, shape.ShapeName));
 
                 var outputPath = Path.Combine(projectDirectory, GeneratedContracts.GeneratedContractsRelativePath, $"{shape.TypeName}.g.cs");
                 outputPaths.Add(Path.GetFullPath(outputPath));

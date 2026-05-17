@@ -74,4 +74,14 @@ public sealed class GeneratedContractShapeAttribute : Attribute
     public bool GenerateConstructors { get; init; } = true;
 
     public GeneratedContractNullabilityTransform NullabilityTransform { get; init; }
+
+    /// <summary>
+    /// Concrete base class for the generated type. The generated class inherits from
+    /// <see cref="BaseClass"/>, and the generated all-args constructor accepts the base
+    /// class's primary-constructor parameters as its leading parameters and forwards
+    /// them via <c>: base(...)</c>.
+    /// <para>Has no effect when <see cref="OutputKind"/> is
+    /// <see cref="GeneratedContractOutputKind.Interface"/>.</para>
+    /// </summary>
+    public Type? BaseClass { get; init; }
 }
