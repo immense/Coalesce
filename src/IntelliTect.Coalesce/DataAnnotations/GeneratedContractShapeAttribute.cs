@@ -84,4 +84,16 @@ public sealed class GeneratedContractShapeAttribute : Attribute
     /// <see cref="GeneratedContractOutputKind.Interface"/>.</para>
     /// </summary>
     public Type? BaseClass { get; init; }
+
+    /// <summary>
+    /// Concrete base class for the generated type, expressed as a C# type name.
+    /// Use this when the base class is also generated or otherwise cannot be
+    /// referenced with <see cref="BaseClass"/> at attribute compile time.
+    /// <para>If this points at another generated contract in the same output set,
+    /// that base contract's generated all-args constructor parameters are forwarded
+    /// from the derived all-args constructor.</para>
+    /// <para>Has no effect when <see cref="OutputKind"/> is
+    /// <see cref="GeneratedContractOutputKind.Interface"/>.</para>
+    /// </summary>
+    public string? BaseClassTypeName { get; init; }
 }

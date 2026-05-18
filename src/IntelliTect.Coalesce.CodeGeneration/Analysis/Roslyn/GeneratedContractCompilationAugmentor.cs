@@ -32,7 +32,7 @@ internal static class GeneratedContractCompilationAugmentor
 
         var targetAssemblyName = NormalizeAssemblyName(compilation.AssemblyName);
         var outputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var generatedTrees = new List<SyntaxTree>();
+        var generatedModels = new List<(GeneratedContracts.GeneratedContractFileModel Model, string OutputPath)>();
         var emittedTypes = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var sourceType in GetCandidateTypes(compilation))
@@ -70,12 +70,18 @@ internal static class GeneratedContractCompilationAugmentor
 
                 var outputPath = Path.Combine(projectDirectory, GeneratedContracts.GeneratedContractsRelativePath, $"{shape.TypeName}.g.cs");
                 outputPaths.Add(Path.GetFullPath(outputPath));
-                generatedTrees.Add(GeneratedContractFile.CreateSyntaxTree(
-                    model,
-                    parseOptions ?? compilation.SyntaxTrees.FirstOrDefault()?.Options as CSharpParseOptions,
-                    outputPath));
+                generatedModels.Add((model, outputPath));
             }
         }
+
+        var resolvedModels = GeneratedContracts.ResolveGeneratedBaseClassParameters(
+            generatedModels.Select(entry => entry.Model).ToArray());
+        var generatedTrees = resolvedModels
+            .Select((model, index) => GeneratedContractFile.CreateSyntaxTree(
+                model,
+                parseOptions ?? compilation.SyntaxTrees.FirstOrDefault()?.Options as CSharpParseOptions,
+                generatedModels[index].OutputPath))
+            .ToList();
 
         if (generatedTrees.Count == 0)
         {

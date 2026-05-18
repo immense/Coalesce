@@ -66,6 +66,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         var projectLookup = BuildProjectDirectoryLookup(GenerationContext);
         var emittedTypes = new HashSet<string>(StringComparer.Ordinal);
 
+        var pending = new List<(string ProjectDirectory, GeneratedContractFileModel Model)>();
         foreach (var sourceType in discoveredTypes)
         {
             var sourceAssemblyName = sourceType.ContainingAssembly?.Name ?? string.Empty;
@@ -81,14 +82,22 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
                         $"The duplicate declaration was found on '{sourceType.ToDisplayString()}'.");
                 }
 
-                yield return Generator<GeneratedContractFile>()
-                    .WithModel(new GeneratedContractFileModel(
+                pending.Add((
+                    projectDirectory,
+                    new GeneratedContractFileModel(
                         shape,
                         ResolveProperties(sourceType, shape),
                         sourceType.ToDisplayString(),
-                        GetRawMembers(sourceType, shape.ShapeName)))
-                    .WithOutputPath(Path.Combine(projectDirectory, GeneratedContractsRelativePath, $"{shape.TypeName}.g.cs"));
+                        GetRawMembers(sourceType, shape.ShapeName))));
             }
+        }
+
+        foreach (var (projectDirectory, model) in ResolveGeneratedBaseClassParameters(pending.Select(entry => entry.Model).ToArray())
+            .Select((model, index) => (pending[index].ProjectDirectory, Model: model)))
+        {
+            yield return Generator<GeneratedContractFile>()
+                    .WithModel(model)
+                    .WithOutputPath(Path.Combine(projectDirectory, GeneratedContractsRelativePath, $"{model.Shape.TypeName}.g.cs"));
         }
     }
 
@@ -299,7 +308,9 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
             AllDeclaredPropertiesPolicy);
 
         var baseClassSymbol = GetTypeSymbol(attribute, nameof(GeneratedContractShapeAttributePlaceholder.BaseClass));
-        var baseClassTypeName = baseClassSymbol?.ToDisplayString(ContractsTypeDisplayFormat);
+        var configuredBaseClassTypeName = GetString(attribute, nameof(GeneratedContractShapeAttributePlaceholder.BaseClassTypeName));
+        var baseClassTypeName = baseClassSymbol?.ToDisplayString(ContractsTypeDisplayFormat)
+            ?? (string.IsNullOrWhiteSpace(configuredBaseClassTypeName) ? null : configuredBaseClassTypeName);
         var baseClassParameters = baseClassSymbol is null
             ? (IReadOnlyList<ConstructorParameter>)Array.Empty<ConstructorParameter>()
             : GetBaseClassConstructorParameters(baseClassSymbol);
@@ -437,6 +448,102 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         }
 
         return members;
+    }
+
+    internal static IReadOnlyList<GeneratedContractFileModel> ResolveGeneratedBaseClassParameters(
+        IReadOnlyList<GeneratedContractFileModel> models)
+    {
+        var lookup = models
+            .Where(model => model.Shape.OutputKind == ClassOutputKind)
+            .GroupBy(model => GetGeneratedContractTypeKey(model.Shape), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        var resolvedConstructorParameters = new Dictionary<string, IReadOnlyList<ConstructorParameter>>(StringComparer.Ordinal);
+        var resolvedModels = new GeneratedContractFileModel[models.Count];
+
+        for (var i = 0; i < models.Count; i++)
+        {
+            var model = models[i];
+            if (model.Shape.OutputKind != ClassOutputKind
+                || string.IsNullOrWhiteSpace(model.Shape.BaseClassTypeName)
+                || model.Shape.BaseClassParameters.Count > 0
+                || !lookup.TryGetValue(ResolveGeneratedBaseTypeKey(model.Shape), out var baseModel))
+            {
+                resolvedModels[i] = model;
+                continue;
+            }
+
+            var baseParameters = ResolveGeneratedConstructorParameters(
+                baseModel,
+                lookup,
+                resolvedConstructorParameters,
+                new HashSet<string>(StringComparer.Ordinal));
+
+            resolvedModels[i] = model with
+            {
+                Shape = model.Shape with { BaseClassParameters = baseParameters }
+            };
+        }
+
+        return resolvedModels;
+    }
+
+    private static IReadOnlyList<ConstructorParameter> ResolveGeneratedConstructorParameters(
+        GeneratedContractFileModel model,
+        IReadOnlyDictionary<string, GeneratedContractFileModel> lookup,
+        IDictionary<string, IReadOnlyList<ConstructorParameter>> resolved,
+        ISet<string> active)
+    {
+        var key = GetGeneratedContractTypeKey(model.Shape);
+        if (resolved.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        if (!active.Add(key))
+        {
+            throw new InvalidOperationException(
+                $"Generated contract '{key}' has a circular generated base class chain.");
+        }
+
+        var parameters = new List<ConstructorParameter>();
+        if (model.Shape.BaseClassParameters.Count > 0)
+        {
+            parameters.AddRange(model.Shape.BaseClassParameters);
+        }
+        else if (!string.IsNullOrWhiteSpace(model.Shape.BaseClassTypeName)
+            && lookup.TryGetValue(ResolveGeneratedBaseTypeKey(model.Shape), out var baseModel))
+        {
+            parameters.AddRange(ResolveGeneratedConstructorParameters(baseModel, lookup, resolved, active));
+        }
+
+        parameters.AddRange(model.Properties.Select(property => new ConstructorParameter(
+            GetContractPropertyTypeName(property),
+            property.Name,
+            property.ParameterDefaultExpression)));
+
+        active.Remove(key);
+        resolved[key] = parameters;
+        return parameters;
+    }
+
+    private static string GetGeneratedContractTypeKey(ContractShape shape)
+        => string.IsNullOrEmpty(shape.TargetNamespace)
+            ? shape.TypeName
+            : $"{shape.TargetNamespace}.{shape.TypeName}";
+
+    private static string ResolveGeneratedBaseTypeKey(ContractShape shape)
+    {
+        var typeName = shape.BaseClassTypeName ?? string.Empty;
+        const string globalPrefix = "global::";
+        if (typeName.StartsWith(globalPrefix, StringComparison.Ordinal))
+        {
+            typeName = typeName.Substring(globalPrefix.Length);
+        }
+
+        return typeName.Contains('.', StringComparison.Ordinal) || string.IsNullOrEmpty(shape.TargetNamespace)
+            ? typeName
+            : $"{shape.TargetNamespace}.{typeName}";
     }
 
     /// <summary>
@@ -949,6 +1056,7 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
         public static int NullabilityTransform { get; set; }
         public static bool GenerateConstructors { get; set; }
         public static Type? BaseClass { get; set; }
+        public static string? BaseClassTypeName { get; set; }
     }
 
     internal sealed class AssemblyDefaults
@@ -1023,6 +1131,55 @@ public class GeneratedContracts : CompositeGenerator<ReflectionRepository>
 
         return type is not INamedTypeSymbol named
             || named.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T;
+    }
+
+    private static string GetContractPropertyTypeName(ContractPropertyModel property)
+    {
+        var display = property.Property.Type.ToDisplayString(ContractsTypeDisplayFormat);
+        if (property.ForceNullable)
+        {
+            return MakeNullable(display, property.Property.Type);
+        }
+
+        if (property.ForceNonNullable)
+        {
+            return MakeNonNullable(display, property.Property.Type);
+        }
+
+        return display;
+    }
+
+    private static string MakeNullable(string display, ITypeSymbol type)
+    {
+        if (display.EndsWith("?", StringComparison.Ordinal))
+        {
+            return display;
+        }
+
+        if (type is INamedTypeSymbol named &&
+            named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        {
+            return display;
+        }
+
+        return display + "?";
+    }
+
+    private static string MakeNonNullable(string display, ITypeSymbol type)
+    {
+        if (display.EndsWith("?", StringComparison.Ordinal))
+        {
+            return display[..^1];
+        }
+
+        if (type is INamedTypeSymbol named &&
+            named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T &&
+            named.TypeArguments.Length == 1)
+        {
+            return named.TypeArguments[0].ToDisplayString(ContractsTypeDisplayFormat);
+        }
+
+        return display;
     }
 }
 

@@ -98,6 +98,61 @@ public class GeneratedContractCompilationAugmentorTests
         await Task.CompletedTask;
     }
 
+    [Test]
+    public async Task GeneratedClassShapes_CanInheritGeneratedBaseClassShape()
+    {
+        var source = $$"""
+            #nullable enable
+            using IntelliTect.Coalesce.DataAnnotations;
+
+            namespace IntelliTect.Coalesce.Testing.GeneratedContracts;
+
+            [GeneratedContractShape(
+                "generated-base",
+                GeneratedContractOutputKind.Class,
+                "{{ReflectionRepositoryFactory.SymbolDiscoveryAssemblyName}}",
+                "IntelliTect.Coalesce.Testing.GeneratedContracts",
+                "GeneratedBaseContract",
+                Members = [nameof(Id)],
+                GenerateConstructors = true)]
+            public class GeneratedBaseContractSource
+            {
+                public int Id { get; set; }
+            }
+
+            [GeneratedContractShape(
+                "generated-derived",
+                GeneratedContractOutputKind.Class,
+                "{{ReflectionRepositoryFactory.SymbolDiscoveryAssemblyName}}",
+                "IntelliTect.Coalesce.Testing.GeneratedContracts",
+                "GeneratedDerivedContract",
+                Members = [nameof(Name)],
+                BaseClassTypeName = "global::IntelliTect.Coalesce.Testing.GeneratedContracts.GeneratedBaseContract",
+                GenerateConstructors = true)]
+            public class GeneratedDerivedContractSource
+            {
+                public string Name { get; set; } = null!;
+            }
+
+            public class Consumer
+            {
+                public GeneratedDerivedContract Contract { get; set; } = new(1, "name");
+
+                public int Id => Contract.Id;
+            }
+            """;
+
+        var compilation = ReflectionRepositoryFactory.GetCompilation(
+            [CSharpSyntaxTree.ParseText(SourceText.From(source), path: "GeneratedDerivedContractSource.cs")],
+            assertSuccess: false);
+
+        var augmentedCompilation = (CSharpCompilation)GeneratedContractCompilationAugmentor
+            .AugmentWithSameProjectGeneratedContracts(compilation, "/tmp/coalesce-generated-contracts-test");
+
+        ReflectionRepositoryFactory.AssertCompilationSuccess(augmentedCompilation);
+        await Task.CompletedTask;
+    }
+
     private static PortableExecutableReference CreateMetadataReference(CSharpCompilation compilation)
     {
         using var stream = new MemoryStream();

@@ -163,6 +163,52 @@ public class GeneratedContractShapeSourceGeneratorTests
         await Assert.That(generatedText.Contains("public required string Name { get; set; }")).IsTrue();
     }
 
+    [Test]
+    public async Task DefaultPolicy_IncludesPublicGetOnlyProperties()
+    {
+        var compilation = CreateCompilation(
+            "GeneratedContractConsumer",
+            """
+            #nullable enable
+            using IntelliTect.Coalesce.DataAnnotations;
+
+            namespace Demo;
+
+            [GeneratedContractShape(
+                "same-project",
+                GeneratedContractOutputKind.Interface,
+                "GeneratedContractConsumer",
+                "Demo.Contracts",
+                "IMaintenanceSpecifier")]
+            public class MaintenanceSpecifierContractSource
+            {
+                public string MaintenanceIdentifier { get; } = null!;
+                public int MaintenanceType { get; } = default!;
+            }
+
+            public class Consumer
+            {
+                public void Read(Demo.Contracts.IMaintenanceSpecifier value)
+                {
+                    _ = value.MaintenanceIdentifier;
+                    _ = value.MaintenanceType;
+                }
+            }
+            """);
+
+        var updatedCompilation = RunGenerator(compilation, out var diagnostics);
+
+        await Assert.That(diagnostics).IsEmpty();
+        await Assert.That(updatedCompilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)).IsEmpty();
+
+        var generatedTree = updatedCompilation.SyntaxTrees
+            .Single(tree => tree.FilePath.Contains("Demo.Contracts.IMaintenanceSpecifier.g.cs", StringComparison.Ordinal));
+        var generatedText = generatedTree.GetText().ToString();
+
+        await Assert.That(generatedText.Contains("string MaintenanceIdentifier { get; }")).IsTrue();
+        await Assert.That(generatedText.Contains("int MaintenanceType { get; }")).IsTrue();
+    }
+
     private static CSharpCompilation CreateCompilation(
         string assemblyName,
         string source,
